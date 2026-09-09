@@ -1,0 +1,20 @@
+{
+  "name": "3bo-platform",
+  "version": "1.0.0",
+  "description": "UEFN AI Platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@distube/ytdl-core": "^4.16.12",
+    "axios": "^1.20.0",
+    "cors": "^2.8.6",
+    "express": "^4.22.2",
+    "socket.io": "^4.8.3"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
