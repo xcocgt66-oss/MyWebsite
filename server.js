@@ -210,8 +210,16 @@ app.get('/api/stream', (req, res) => {
 
         // مهلة زمنية لمنع تعليق الطلب إلى الأبد إذا كان رابط الفيديو "مخنوقاً" (throttled) من طرف يوتيوب
         // أو لم يستجب مصدر الفيديو إطلاقاً - بدون هذا، المشغل يبقى فارغاً بدون أي خطأ ظاهر
-        const CONNECT_TIMEOUT_MS = 15000; // مهلة الاتصال الأولي والحصول على الهيدرز
-        const STALL_TIMEOUT_MS = 20000;   // مهلة إذا توقف تدفق البيانات بعد بدء البث
+        // مهم: هذه المهلات أقصر من مهلة الواجهة (20 ثانية) عمداً، حتى يرد السيرفر بخطأ واضح
+        // قبل أن يقطع المتصفح الاتصال من جهته (وإلا تظهر 499 في السجلات بدل خطأ حقيقي)
+        const CONNECT_TIMEOUT_MS = 8000;  // مهلة الاتصال الأولي والحصول على الهيدرز
+        const STALL_TIMEOUT_MS = 8000;    // مهلة إذا توقف تدفق البيانات بعد بدء البث
+
+        const startTime = Date.now();
+        const elapsed = () => `${Date.now() - startTime}ms`;
+        let bytesReceived = 0;
+
+        console.log(`[Stream] بدء الاتصال بـ ${parsedUrl.hostname} (محاولة إعادة توجيه رقم ${redirectCount})`);
 
         let settled = false;
         let stallTimer = null;
@@ -220,7 +228,7 @@ app.get('/api/stream', (req, res) => {
             if (settled) return;
             settled = true;
             if (stallTimer) clearTimeout(stallTimer);
-            console.error('[Stream Failure]:', message);
+            console.error(`[Stream Failure] بعد ${elapsed()} - استُلم ${bytesReceived} بايت - السبب:`, message);
             if (!res.headersSent) {
                 res.status(status).json({ error: message });
             } else {
@@ -230,19 +238,20 @@ app.get('/api/stream', (req, res) => {
 
         const connectTimer = setTimeout(() => {
             proxyReq.destroy();
-            failOnce('انتهت مهلة الاتصال بمصدر الفيديو - الرابط قد يكون منتهي الصلاحية أو مخنوقاً (throttled)', 504);
+            failOnce(`انتهت مهلة الاتصال (${CONNECT_TIMEOUT_MS}ms) - لم يرد ${parsedUrl.hostname} بالهيدرز إطلاقاً`, 504);
         }, CONNECT_TIMEOUT_MS);
 
         const armStallTimer = () => {
             if (stallTimer) clearTimeout(stallTimer);
             stallTimer = setTimeout(() => {
                 proxyReq.destroy();
-                failOnce('توقف بث الفيديو فجأة (stalled) - على الأرجح يوتيوب يقوم بخنق الرابط', 504);
+                failOnce(`توقف تدفق البيانات لأكثر من ${STALL_TIMEOUT_MS}ms - على الأرجح يوتيوب يخنق الرابط (throttling)`, 504);
             }, STALL_TIMEOUT_MS);
         };
 
         const proxyReq = client.request(options, (proxyRes) => {
             clearTimeout(connectTimer);
+            console.log(`[Stream] وصلت الهيدرز من ${parsedUrl.hostname} بعد ${elapsed()} - الحالة: ${proxyRes.statusCode} - content-length: ${proxyRes.headers['content-length'] || 'غير معروف'}`);
             settled = true; // وصلنا للهيدرز بنجاح، أي فشل بعد هذا سيُعالج عبر pipe error فقط
 
             if ([301, 302, 303, 307, 308].includes(proxyRes.statusCode) && proxyRes.headers.location) {
@@ -276,14 +285,20 @@ app.get('/api/stream', (req, res) => {
 
             // راقب توقف تدفق البيانات (throttling) - كل جزء بيانات يُعيد ضبط المؤقت
             armStallTimer();
-            proxyRes.on('data', () => armStallTimer());
-            proxyRes.on('end', () => { if (stallTimer) clearTimeout(stallTimer); });
+            proxyRes.on('data', (chunk) => {
+                bytesReceived += chunk.length;
+                armStallTimer();
+            });
+            proxyRes.on('end', () => {
+                if (stallTimer) clearTimeout(stallTimer);
+                console.log(`[Stream] اكتمل البث من ${parsedUrl.hostname} بعد ${elapsed()} - إجمالي البايتات: ${bytesReceived}`);
+            });
 
             proxyRes.pipe(res);
 
             proxyRes.on('error', (err) => {
                 if (stallTimer) clearTimeout(stallTimer);
-                console.error('[Stream Pipe Error]:', err.message);
+                console.error(`[Stream Pipe Error] بعد ${elapsed()} - استُلم ${bytesReceived} بايت:`, err.message);
                 if (!res.headersSent) res.status(500).send('Stream error');
                 else res.destroy();
             });
@@ -297,6 +312,9 @@ app.get('/api/stream', (req, res) => {
         req.on('close', () => {
             clearTimeout(connectTimer);
             if (stallTimer) clearTimeout(stallTimer);
+            if (!settled) {
+                console.warn(`[Stream] المتصفح أغلق الاتصال من جهته بعد ${elapsed()} - استُلم ${bytesReceived} بايت فقط (لم يكتمل)`);
+            }
             proxyReq.destroy();
         });
 
