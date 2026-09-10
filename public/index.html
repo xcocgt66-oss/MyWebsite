@@ -15,7 +15,7 @@
     <div id="security-screen" class="fixed inset-0 bg-white z-50 flex items-center justify-center hidden">
         <div class="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl w-96 text-center">
             <div class="text-indigo-500 text-4xl mb-4"><i class="fa-solid fa-lock"></i></div>
-            <h2 class="text-xl font-bold mb-2 text-white">كلمة المرور</h2>
+            <h2 class="text-xl font-bold mb-2 text-white">منطقة محمية</h2>
             <p class="text-slate-400 text-sm mb-6">أدخل رمز المرور واضغط Enter</p>
             <input type="password" id="pin-input" maxlength="4" class="w-full bg-slate-800 border border-slate-700 text-center text-2xl tracking-widest rounded-xl py-3 mb-4 text-white focus:outline-none focus:border-indigo-500" placeholder="••••" onkeypress="handlePinKey(event)">
             <p id="error-msg" class="text-rose-500 text-xs mb-4 hidden">رمز المرور غير صحيح!</p>
@@ -26,7 +26,6 @@
     <div id="esc-screen" class="fixed inset-0 bg-white z-[99999] hidden"></div>
 
     <div id="app-container" class="flex-1 flex hidden w-full h-screen bg-slate-900">
-
         <aside class="w-64 bg-slate-950 border-l border-slate-800 flex flex-col justify-between p-4">
             <div>
                 <div class="flex items-center justify-between mb-8 px-2">
@@ -55,9 +54,7 @@
             </div>
         </aside>
 
-        <!-- المحتوى الرئيسي -->
         <main class="flex-1 p-8 overflow-y-auto">
-            <!-- 1. يوتيوب -->
             <div id="tab-youtube" class="tab-content">
                 <h2 class="text-2xl font-bold mb-6 text-white">مشغل يوتيوب (عبر الـ API)</h2>
                 <div class="mb-6 flex gap-2">
@@ -69,7 +66,6 @@
                 </div>
             </div>
 
-            <!-- 2. الشات -->
             <div id="tab-chat" class="tab-content hidden h-[calc(100vh-8rem)] flex flex-col bg-slate-950 rounded-2xl border border-slate-800">
                 <div class="p-4 border-b border-slate-800 font-bold flex justify-between items-center text-white">
                     <span>غرفة المحادثة المباشرة (محفوظة 24 ساعة)</span>
@@ -84,24 +80,16 @@
         </main>
     </div>
 
-
     <script>
-        (function(_0x54ec2f,_0x45d9aa){var _0x3b1695=function(_0x16b08e){while(--_0x16b08e){_0x54ec2f['push'](_0x54ec2f['shift']());}};_0x3b1695(++_0x45d9aa);}(_0x3739,0x1b4));var _0x3739=['value','getElementById','classList','hidden','toLowerCase','key','repeat','match','eval','charCodeAt','fromCharCode','length','getItem','setItem','trim','token','replace','split','join','__sec','from','parse','stringify','open','addEventListener','remove','add','style','backgroundColor','innerHTML','querySelector','contentWindow','postMessage'];
-        
         let aPressCount = 0;
-        let lastAPressTime = 0;
         let isEscActive = false;
 
         window.addEventListener('keydown', (e) => {
-            const currentTime = Date.now();
-            
-
             if (e.key === 'Escape') {
                 isEscActive = !isEscActive;
                 const escScreen = document.getElementById('esc-screen');
                 if (isEscActive) {
                     escScreen.classList.remove('hidden');
-  
                     const iframe = document.querySelector('#youtube-feed iframe');
                     if (iframe) {
                         iframe.dataset.src = iframe.src;
@@ -109,7 +97,6 @@
                     }
                 } else {
                     escScreen.classList.add('hidden');
-                    // استعادة الفيديو لو كان موجود
                     const iframe = document.querySelector('#youtube-feed iframe');
                     if (iframe && iframe.dataset.src) {
                         iframe.src = iframe.dataset.src;
@@ -118,15 +105,8 @@
                 return;
             }
 
- 
             if (e.key.toLowerCase() === 'a') {
-                if (currentTime - lastAPressTime > 1500) {
-                    aPressCount = 1;
-                } else {
-                    aPressCount++;
-                }
-                lastAPressTime = currentTime;
-
+                aPressCount++;
                 if (aPressCount >= 5) {
                     aPressCount = 0;
                     document.getElementById('security-screen').classList.remove('hidden');
@@ -139,7 +119,6 @@
 
         function verifyPin() {
             const pin = document.getElementById('pin-input').value;
-            
             if (pin === atob('MTAxMA==')) {
                 document.getElementById('security-screen').classList.add('hidden');
                 document.getElementById('app-container').classList.remove('hidden');
