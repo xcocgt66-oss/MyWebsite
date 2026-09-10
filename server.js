@@ -14,6 +14,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+const APIFY_TOKEN = 'apify_api_XHfc2DEoGtfX3HE8ap9zhPGoZYt62s3d1ReW';
 const RAPID_API_KEY = '515f7a3162mshb63efcc57b50884p106404jsn51481b32a788';
 
 async function fetchWithFallback(apiList) {
@@ -53,39 +54,54 @@ const handleYoutubeRequest = async (req, res) => {
     const url = req.body.url || req.query.url;
     if (!url) return res.status(400).json({ error: 'الرجاء توفير رابط يوتيوب' });
 
-    // 1. المحاولة الأولى: استخدام Cobalt API لجلب 720p/1080p مدمجة بالصوت والفيديو
+    // 1. المحاولة الرئيسية: استخدام Apify Actor (streamers/youtube-video-downloader) لجلب 1080p
     try {
-        const cobaltRes = await axios.post('https://api.cobalt.tools/', {
-            url: url,
-            videoQuality: '720',
-            downloadMode: 'auto'
-        }, {
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
+        console.log(`[Apify] Starting YouTube download task for quality 1080p...`);
+        const apifyRes = await axios.post(
+            `https://api.apify.com/v2/acts/streamers~youtube-video-downloader/run-sync-get-dataset-items?token=${APIFY_TOKEN}`,
+            {
+                preferredFormat: "mp4",
+                preferredQuality: "1080p",
+                storeInKVStore: true,
+                videos: [
+                    {
+                        url: url
+                    }
+                ],
+                filenameTemplateParts: [
+                    "title"
+                ],
+                transcriptionAndSubtitle: "NONE"
             },
-            timeout: 7000
-        });
+            {
+                headers: { 'Content-Type': 'application/json' },
+                timeout: 60000 // انتظار حتى انتهاء التنفيذ سينك (Sync)
+            }
+        );
 
-        if (cobaltRes.data && (cobaltRes.data.url || cobaltRes.data.picker)) {
-            const hdUrl = cobaltRes.data.url || cobaltRes.data.picker[0]?.url;
-            if (hdUrl) {
-                console.log(`[Success] Fetched HD Direct Stream (720p+) via Cobalt API`);
+        const items = apifyRes.data;
+        if (Array.isArray(items) && items.length > 0) {
+            const item = items[0];
+            const videoUrl = item.videoUrl || item.downloadUrl || item.url || (item.fileUrl ? item.fileUrl : null);
+            
+            if (videoUrl) {
+                console.log(`[Success] Fetched 1080p Direct Stream via Apify: ${videoUrl}`);
                 return res.json({
                     success: true,
-                    url: hdUrl,
-                    link: hdUrl,
-                    stream_url: hdUrl,
-                    file: hdUrl,
-                    title: 'YouTube Video (HD 720p+)'
+                    url: videoUrl,
+                    link: videoUrl,
+                    stream_url: videoUrl,
+                    file: videoUrl,
+                    title: item.title || 'YouTube Video (1080p)'
                 });
             }
         }
     } catch (err) {
-        console.log('[Info] Cobalt API skipped, falling back to RapidAPI...');
+        console.error('[Error] Apify API failed or timed out:', err.message);
     }
 
-    // 2. المحاولة الثانية: RapidAPI كخيار احتياطي
+    // 2. المحاولة الاحتياطية: RapidAPI في حال تعثر Apify
+    console.log('[Info] Falling back to RapidAPI...');
     const youtubeApis = [
         {
             method: 'GET',
@@ -138,7 +154,7 @@ const handleYoutubeRequest = async (req, res) => {
             if (playableFormats.length > 0) {
                 const bestFormat = playableFormats[0];
                 mediaUrl = bestFormat.url || bestFormat.link;
-                console.log(`[Success] Selected Resolution: ${extractHeight(bestFormat)}p | Quality: ${bestFormat.qualityLabel || bestFormat.quality || 'HD'}`);
+                console.log(`[Fallback Success] Selected Resolution: ${extractHeight(bestFormat)}p`);
             }
         }
 
