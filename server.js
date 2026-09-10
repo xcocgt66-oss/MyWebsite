@@ -51,6 +51,181 @@ app.all('/api/download', handleTikTokRequest);
 
 const handleYoutubeRequest = async (req, res) => {
     const url = req.body.url || req.query.url;
+    
+    if (!url) return res.status(400).json({ error: 'الرجاء توفير رابط يوتيوب' });
+
+    let videoId = url;
+    if (url.includes('v=')) {
+        videoId = url.split('v=')[1]?.split('&')[0];
+    } else if (url.includes('youtu.be/')) {
+        videoId = url.split('youtu.be/')[1]?.split('?')[0];
+    } else if (url.includes('shorts/')) {
+        videoId = url.split('shorts/')[1]?.split('?')[0];
+    }
+
+    const youtubeApis = [
+        {
+            method: 'GET',
+            url: 'https://yt-api.p.rapidapi.com/dl',
+            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'yt-api.p.rapidapi.com' },
+            params: { id: videoId }
+        },
+        {
+            method: 'GET',
+            url: 'https://youtube-media-downloader.p.rapidapi.com/v2/video/details',
+            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'youtube-media-downloader.p.rapidapi.com' },
+            params: { url: `https://www.youtube.com/watch?v=${videoId}` }
+        }
+    ];
+
+    for (const apiConfig of youtubeApis) {
+        try {
+            const response = await axios(apiConfig);
+            const data = response.data;
+            let streamUrl = '';
+            let videoTitle = data.title || 'YouTube Video';
+
+            if (data.formats && Array.isArray(data.formats)) {
+                const combinedFormat = data.formats.find(f => f.url && f.hasVideo !== false && f.hasAudio !== false) ||
+                                       data.formats.find(f => f.url && f.mimeType && f.mimeType.includes('video/mp4'));
+                if (combinedFormat) {
+                    streamUrl = combinedFormat.url;
+                }
+            }
+
+            if (!streamUrl && data.videos && data.videos.items) {
+                const item = data.videos.items[0];
+                streamUrl = item?.url || item?.link;
+            }
+
+            if (!streamUrl) {
+                streamUrl = data.link || data.url || data.download_url;
+            }
+
+            if (streamUrl) {
+                return res.json({
+                    success: true,
+                    url: streamUrl,
+                    link: streamUrl,
+                    title: videoTitle
+                });
+            }
+        } catch (err) {
+            console.error(`[Error] Endpoint failed: ${apiConfig.url}`, err.message);
+        }
+    }
+
+    return res.status(500).json({ success: false, error: 'تعذر استخراج رابط قابل للتشغيل داخل المشغل.' });
+};
+
+app.all('/api/youtube', handleYoutubeRequest);
+app.all('/api/youtube/play', handleYoutubeRequest);
+app.all('/api/video', handleYoutubeRequest);
+app.all('/api/media', handleYoutubeRequest);
+
+app.all('/api/football/:endpoint', async (req, res) => {
+    const { endpoint } = req.params;
+    const query = req.method === 'POST' ? req.body : req.query;
+
+    const footballApis = [
+        { method: 'GET', url: `https://v3.football.api-sports.io/${endpoint}`, headers: { 'x-apisports-key': 'a0094f3392b248423f5ffb12191f90c0' }, params: query },
+        { method: 'GET', url: `https://free-api-live-football-data.p.rapidapi.com/${endpoint}`, headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'free-api-live-football-data.p.rapidapi.com' }, params: query }
+    ];
+
+    try {
+        const data = await fetchWithFallback(footballApis);
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: 'Football APIs are currently down' });
+    }
+});
+
+// البروكسي الخاص بتخطي حماية يوتيوب
+app.get('/api/stream', async (req, res) => {
+    const streamUrl = req.query.url;
+    if (!streamUrl) return res.status(400).send('No video URL provided');
+
+    try {
+        const range = req.headers.range;
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://www.youtube.com/',
+            'Origin': 'https://www.youtube.com/'
+        };
+
+        if (range) {
+            headers['Range'] = range;
+        }
+
+        const response = await axios({
+            method: 'GET',
+            url: streamUrl,
+            responseType: 'stream',
+            headers: headers,
+            validateStatus: status => status >= 200 && status < 400
+        });
+
+        const headersToForward = ['content-type', 'content-length', 'accept-ranges', 'content-range'];
+        headersToForward.forEach(h => {
+            if (response.headers[h]) {
+                res.setHeader(h, response.headers[h]);
+            }
+        });
+        res.status(response.status);
+
+        response.data.pipe(res);
+
+        req.on('close', () => {
+            if (response.data && typeof response.data.destroy === 'function') {
+                response.data.destroy();
+            }
+        });
+
+    } catch (error) {
+        console.error('[Stream Proxy Error]', error.message);
+        if (!res.headersSent) res.status(500).send('Streaming error');
+    }
+});
+
+io.on('connection', (socket) => {
+    socket.on('send_message', (messageData) => {
+        io.emit('receive_message', messageData);
+    });
+
+    socket.on('chat_message', (msg) => {
+        io.emit('chat_message', msg);
+    });
+});
+
+app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: `API endpoint not found: ${req.originalUrl}` });
+});
+
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
+    ];
+
+    try {
+        const data = await fetchWithFallback(tiktokApis);
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: 'TikTok APIs are currently down' });
+    }
+};
+
+app.all('/api/tiktok/info', handleTikTokRequest);
+app.all('/api/tiktok', handleTikTokRequest);
+app.all('/api/tiktok/play', handleTikTokRequest);
+app.all('/api/download', handleTikTokRequest);
+
+const handleYoutubeRequest = async (req, res) => {
+    const url = req.body.url || req.query.url;
     const quality = req.body.quality || req.query.quality || '360';
 
     if (!url) return res.status(400).json({ error: 'الرجاء توفير رابط يوتيوب' });
