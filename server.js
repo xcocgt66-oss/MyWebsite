@@ -22,13 +22,7 @@ setInterval(() => {
     chatHistory = chatHistory.filter(msg => now - msg.timestamp < TWENTY_FOUR_HOURS);
 }, 60 * 60 * 1000);
 
-// 1. YouTube API (في حال رغبتك بجلب بيانات أو تشغيل الـ Stream الخاص بك)
-app.get('/api/youtube', async (req, res) => {
-    // يمكنك ربط طلبات اليوتيوب هنا إذا توفرت نقطة نهاية API مخصصة
-    res.json([]);
-});
-
-// 2. TikTok API (بحث الاكسبلور والمقاطع للـ Stream)
+// TikTok API (Search & Explore)
 app.get('/api/tiktok/search', async (req, res) => {
     const query = req.query.q || 'cat';
     try {
@@ -59,22 +53,22 @@ app.get('/api/tiktok/explore', async (req, res) => {
     }
 });
 
-// 3. Matches API (Betfair & Diamond Sports الحقيقي بدون أي وهم)
+// Matches API (Free API Live Football Data المضمون 100%)
 app.get('/api/matches', async (req, res) => {
     try {
-        const response = await axios.get('https://betfair-sports-casino-live-tv-result-odds.p.rapidapi.com/allSportsId', {
+        const response = await axios.get('https://free-api-live-football-data.p.rapidapi.com/schedules-livescores', {
             headers: {
                 'X-RapidAPI-Key': RAPID_API_KEY,
-                'X-RapidAPI-Host': 'betfair-sports-casino-live-tv-result-odds.p.rapidapi.com'
+                'X-RapidAPI-Host': 'free-api-live-football-data.p.rapidapi.com'
             }
         });
         res.json(response.data);
     } catch (error) {
-        res.status(500).json({ error: 'فشل جلب المباريات من السيرفر الخارجي' });
+        res.status(500).json({ error: 'فشل جلب المباريات من الـ API' });
     }
 });
 
-// إدارة المتصلين والشات
+// Socket.io & Chat History
 let onlineUsersCount = 0;
 
 io.on('connection', (socket) => {
