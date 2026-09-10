@@ -13,16 +13,22 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const RAPID_API_KEY = '515f7a3162mshb63efcc57b50884p106404jsn51481b32a788';
 
-// تخزين رسائل الشات لمدة 24 ساعة
+// حفظ الشات لمدة 24 ساعة
 let chatHistory = [];
 const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
 
 setInterval(() => {
     const now = Date.now();
     chatHistory = chatHistory.filter(msg => now - msg.timestamp < TWENTY_FOUR_HOURS);
-}, 60 * 60 * 1000); // تنظيف كل ساعة
+}, 60 * 60 * 1000);
 
-// TikTok API (Search & Explore Feed)
+// 1. YouTube API (في حال رغبتك بجلب بيانات أو تشغيل الـ Stream الخاص بك)
+app.get('/api/youtube', async (req, res) => {
+    // يمكنك ربط طلبات اليوتيوب هنا إذا توفرت نقطة نهاية API مخصصة
+    res.json([]);
+});
+
+// 2. TikTok API (بحث الاكسبلور والمقاطع للـ Stream)
 app.get('/api/tiktok/search', async (req, res) => {
     const query = req.query.q || 'cat';
     try {
@@ -53,10 +59,9 @@ app.get('/api/tiktok/explore', async (req, res) => {
     }
 });
 
-// Matches API (Betfair & Diamond Sports Integration)
+// 3. Matches API (Betfair & Diamond Sports الحقيقي بدون أي وهم)
 app.get('/api/matches', async (req, res) => {
     try {
-        // جلب الأحداث الرياضية الحية والمستقبلية والمنتهية عبر Betfair API
         const response = await axios.get('https://betfair-sports-casino-live-tv-result-odds.p.rapidapi.com/allSportsId', {
             headers: {
                 'X-RapidAPI-Key': RAPID_API_KEY,
@@ -65,23 +70,17 @@ app.get('/api/matches', async (req, res) => {
         });
         res.json(response.data);
     } catch (error) {
-        // بيانات تجريبية احترافية في حال فشل الـ API لتوضيح الواجهة (منتهية، قادمة، Live)
-        res.json([
-            { id: 1, name: 'ريال مدريد vs برشلونة', status: 'LIVE', time: 'الدقيقة 74', league: 'الدوري الإسباني', isLive: true },
-            { id: 2, name: 'مانشستر سيتي vs ليفربول', status: 'UPCOMING', time: 'تبدأ بعد ساعتين', league: 'الدوري الإنجليزي', isLive: false },
-            { id: 3, name: 'بايرن ميونخ vs دورتموند', status: 'FINISHED', time: 'انتهت (2 - 1)', league: 'الدوري الألماني', isLive: false }
-        ]);
+        res.status(500).json({ error: 'فشل جلب المباريات من السيرفر الخارجي' });
     }
 });
 
-// Socket.io & Chat History
+// إدارة المتصلين والشات
 let onlineUsersCount = 0;
 
 io.on('connection', (socket) => {
     onlineUsersCount++;
     io.emit('online-count', onlineUsersCount);
 
-    // إرسال تاريخ الشات للمستخدم الجديد
     socket.emit('chat-history', chatHistory);
 
     socket.on('chat-message', (data) => {
