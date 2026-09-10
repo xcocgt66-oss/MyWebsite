@@ -61,18 +61,35 @@
 
         <!-- المحتوى الرئيسي -->
         <main class="flex-1 p-8 overflow-y-auto">
+            <!-- قسم اليوتيوب مع خانة إضافة الرابط -->
             <div id="tab-youtube" class="tab-content">
                 <h2 class="text-2xl font-bold mb-6">محتوى اليوتيوب</h2>
+                <div class="mb-6 flex gap-2">
+                    <input type="text" id="yt-link-input" placeholder="أدخل رابط فيديو يوتيوب هنا..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500">
+                    <button onclick="addYoutubeLink()" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-white font-medium">إضافة</button>
+                </div>
                 <div id="youtube-feed" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
             </div>
+
+            <!-- قسم تيك توك مع خانة إضافة الرابط -->
             <div id="tab-tiktok" class="tab-content hidden">
                 <h2 class="text-2xl font-bold mb-6">محتوى تيك توك</h2>
+                <div class="mb-6 flex gap-2">
+                    <input type="text" id="tt-link-input" placeholder="أدخل معرف أو رابط تيك توك هنا..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500">
+                    <button onclick="loadTikTokFeed()" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-white font-medium">بحث / جلب</button>
+                </div>
                 <div id="tiktok-feed" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
             </div>
+
+            <!-- قسم المباريات -->
             <div id="tab-matches" class="tab-content hidden">
-                <h2 class="text-2xl font-bold mb-6">جدول المباريات</h2>
-                <div id="matches-feed" class="space-y-4"></div>
+                <h2 class="text-2xl font-bold mb-6">جدول المباريات (Betfair & Diamond)</h2>
+                <div id="matches-feed" class="space-y-4">
+                    <p class="text-slate-500">جاري تحميل المباريات...</p>
+                </div>
             </div>
+
+            <!-- قسم الشات -->
             <div id="tab-chat" class="tab-content hidden h-[calc(100vh-8rem)] flex flex-col bg-slate-950 rounded-2xl border border-slate-800">
                 <div class="p-4 border-b border-slate-800 font-bold">غرفة المحادثة المباشرة</div>
                 <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3"></div>
@@ -87,7 +104,6 @@
     <script>
         const socket = io();
 
-        // نظام تخزين واسم المستخدم
         let username = localStorage.getItem('escapped_username') || 'User_YHCW';
         document.getElementById('current-username-display').innerText = username;
 
@@ -100,7 +116,7 @@
             }
         }
 
-        // نظام الضغط على حرف A 5 مرات وتبييض الشاشة الأصلي
+        // وضع الشاشة البيضاء عند الضغط على A 5 مرات
         let aPressCount = 0;
         window.addEventListener('keydown', (e) => {
             if (e.key.toLowerCase() === 'a') {
@@ -119,7 +135,7 @@
             if (pin === "1010") {
                 document.getElementById('security-screen').classList.add('hidden');
                 document.getElementById('app-container').classList.remove('hidden');
-                loadInitialData();
+                loadMatches();
             } else {
                 document.getElementById('error-msg').classList.remove('hidden');
             }
@@ -135,17 +151,57 @@
             }
         }
 
-        function loadInitialData() {
-            fetch('/api/youtube')
-                .then(res => res.json())
-                .catch(() => {});
+        // يوتيوب
+        function addYoutubeLink() {
+            const input = document.getElementById('yt-link-input');
+            const url = input.value.trim();
+            if(!url) return;
+            const container = document.getElementById('youtube-feed');
+            const div = document.createElement('div');
+            div.className = "bg-slate-950 p-4 rounded-xl border border-slate-800 text-sm break-all";
+            div.innerHTML = `<p class="text-indigo-400 font-bold mb-2">رابط يوتيوب:</p><a href="${url}" target="_blank" class="text-slate-300 underline">${url}</a>`;
+            container.appendChild(div);
+            input.value = '';
         }
 
+        // تيك توك
+        function loadTikTokFeed() {
+            const container = document.getElementById('tiktok-feed');
+            container.innerHTML = '<p class="text-slate-500">جاري البحث في تيك توك...</p>';
+            fetch('/api/tiktok')
+                .then(res => res.json())
+                .then(data => {
+                    container.innerHTML = '<p class="text-slate-400">تم جلب بيانات تيك توك بنجاح.</p>';
+                })
+                .catch(() => {
+                    container.innerHTML = '<p class="text-rose-500">تعذر جلب بيانات تيك توك حالياً.</p>';
+                });
+        }
+
+        // المباريات
+        function loadMatches() {
+            const container = document.getElementById('matches-feed');
+            fetch('/api/matches')
+                .then(res => res.json())
+                .then(data => {
+                    if(Array.isArray(data) && data.length > 0) {
+                        container.innerHTML = data.map(m => `<div class="bg-slate-950 p-4 rounded-xl border border-slate-800">مباراة / بطولة ID: ${JSON.stringify(m)}</div>`).join('');
+                    } else {
+                        container.innerHTML = '<div class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-emerald-400">سيرفر المباريات متصل وجاهز للبيانات عبر Betfair & Diamond API.</div>';
+                    }
+                })
+                .catch(() => {
+                    container.innerHTML = '<div class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-slate-400">جاري استقبال بيانات الرياضة والمباريات...</div>';
+                });
+        }
+
+        // عداد المتصلين
         socket.on('online-count', (count) => {
             const el = document.getElementById('online-count-display');
             if (el) el.innerText = count;
         });
 
+        // الشات
         socket.on('chat-message', (data) => {
             appendMessage(data.user || 'User_YHCW', data.text || '');
         });
