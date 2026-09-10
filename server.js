@@ -29,7 +29,7 @@ async function fetchWithFallback(apiList) {
 }
 
 // ==========================================
-// 1. مسارات التيك توك
+// 1. مسارات التيك توك الشاملة + نظام البحث الجديد
 // ==========================================
 const handleTikTokRequest = async (req, res) => {
     const url = req.body.url || req.query.url || req.body.link || req.query.link;
@@ -53,8 +53,39 @@ app.all('/api/tiktok', handleTikTokRequest);
 app.all('/api/tiktok/play', handleTikTokRequest);
 app.all('/api/download', handleTikTokRequest);
 
+// مسار بحث تيك توك الجديد (tiktok-api23) مع إمكانية تحديد وسيلة البحث والكلمة المفتاحية
+app.all('/api/tiktok/search', async (req, res) => {
+    const keyword = req.query.keyword || req.body.keyword;
+    const searchType = req.query.type || req.body.type || 'others-searched-for'; // الافتراضي أو حسب الاختيار (general, video, account, live, photo, others-searched-for...)
+    
+    if (!keyword) return res.status(400).json({ error: 'الرجاء إدخال الكلمة المفتاحية للبحث' });
+
+    // تحديد الـ Endpoint بناءً على وسيلة البحث المطلوبة
+    let endpointPath = 'others-searched-for';
+    if (searchType === 'general') endpointPath = 'search-general';
+    else if (searchType === 'video') endpointPath = 'search-video';
+    else if (searchType === 'account') endpointPath = 'search-user';
+    else if (searchType === 'live') endpointPath = 'search-live';
+    else if (searchType === 'photo') endpointPath = 'search-photo';
+
+    try {
+        const response = await axios({
+            method: 'GET',
+            url: `https://tiktok-api23.p.rapidapi.com/api/search/${endpointPath}`,
+            headers: {
+                'X-Rapidapi-Key': RAPID_API_KEY,
+                'X-Rapidapi-Host': 'tiktok-api23.p.rapidapi.com'
+            },
+            params: { keyword }
+        });
+        res.json(response.data);
+    } catch (err) {
+        res.status(500).json({ error: 'فشل تنفيذ البحث عبر تيك توك API' });
+    }
+});
+
 // ==========================================
-// 2. مسارات اليوتيوب بجودة عالية (720p+)
+// 2. مسارات اليوتيوب والفيديو (جودة 720p+)
 // ==========================================
 const handleYoutubeRequest = async (req, res) => {
     const url = req.body.url || req.query.url;
@@ -77,13 +108,11 @@ const handleYoutubeRequest = async (req, res) => {
 
     try {
         const data = await fetchWithFallback(youtubeApis);
-        
         let mediaUrl = '';
         if (data.formats && Array.isArray(data.formats)) {
             const hdFormat = data.formats.find(f => f.quality === '720p' || f.height >= 720) || data.formats[0];
             mediaUrl = hdFormat?.url || '';
         }
-        
         if (!mediaUrl) {
             mediaUrl = data.link || data.url || data.videos?.items?.[0]?.url || data.audio?.[0]?.url || '';
         }
@@ -129,32 +158,35 @@ app.all('/api/football/:endpoint', async (req, res) => {
 });
 
 // ==========================================
-// 4. نظام الشات المتوافق تماماً مع الواجهة
+// 4. نظام الشات الأصلي (المنشن، المتصلين، والأصوات)
 // ==========================================
+const connectedUsers = {};
+
 io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
+    connectedUsers[socket.id] = { id: socket.id, name: `User_${socket.id.substring(0, 4)}` };
 
-    // استقبال رسائل الشات وإعادة بثها بكل الأشكال المحتملة للواجهة
-    socket.on('chat_message', (data) => {
-        // إذا كان المرسل أرسل الاسم كـ undefined أو فارغ، نصلحه
-        if (data && typeof data === 'object') {
-            if (!data.user || data.user === 'undefined') data.user = `User_${socket.id.substring(0, 4)}`;
-            if (!data.username || data.username === 'undefined') data.username = data.user;
+    io.emit('online_users', Object.values(connectedUsers));
+
+    socket.on('set_username', (name) => {
+        if (name) {
+            connectedUsers[socket.id].name = name;
+            io.emit('online_users', Object.values(connectedUsers));
         }
+    });
+
+    socket.on('chat_message', (data) => {
         io.emit('chat_message', data);
-        io.emit('receive_message', data);
     });
 
     socket.on('send_message', (data) => {
-        if (data && typeof data === 'object') {
-            if (!data.user || data.user === 'undefined') data.user = `User_${socket.id.substring(0, 4)}`;
-            if (!data.username || data.username === 'undefined') data.username = data.user;
-        }
         io.emit('receive_message', data);
         io.emit('chat_message', data);
     });
 
     socket.on('disconnect', () => {
+        delete connectedUsers[socket.id];
+        io.emit('online_users', Object.values(connectedUsers));
         console.log(`User disconnected: ${socket.id}`);
     });
 });
