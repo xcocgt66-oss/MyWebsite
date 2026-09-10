@@ -38,7 +38,6 @@ async function fetchWithFallback(apiList) {
 const handleTikTokRequest = async (req, res) => {
     let url = req.body.url || req.query.url || req.body.link || req.query.link;
     
-    // حماية السيرفر من القيم غير النصية
     if (Array.isArray(url)) url = url[0]; 
     if (!url || typeof url !== 'string') return res.status(400).json({ error: 'الرجاء توفير رابط صحيح' });
 
@@ -63,13 +62,11 @@ app.all('/api/download', handleTikTokRequest);
 const handleYoutubeRequest = async (req, res) => {
     let url = req.body.url || req.query.url;
     
-    // حماية السيرفر من القيم المزدوجة (Arrays) أو الفارغة
     if (Array.isArray(url)) url = url[0];
     if (!url || typeof url !== 'string') return res.status(400).json({ error: 'الرجاء توفير رابط يوتيوب صحيح' });
 
     let videoId = url;
     try {
-        // حماية الـ Index عند قص الرابط (تجنب Crash السيرفر)
         if (url.includes('v=')) {
             const splitV = url.split('v=');
             if (splitV.length > 1) {
@@ -150,7 +147,7 @@ app.all('/api/youtube/play', handleYoutubeRequest);
 app.all('/api/video', handleYoutubeRequest);
 app.all('/api/media', handleYoutubeRequest);
 
-// البروكسي الخاص بتخطي حماية يوتيوب (مؤمن)
+// البروكسي الخاص بتخطي حماية يوتيوب مع حماية ضد خطأ 500 وتحويل تلقائي للرابط المباشر
 app.get('/api/stream', async (req, res) => {
     let streamUrl = req.query.url;
     
@@ -160,7 +157,10 @@ app.get('/api/stream', async (req, res) => {
     try {
         const range = req.headers.range;
         const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Encoding': 'identity;q=1, *;q=0',
+            'Connection': 'keep-alive',
             'Referer': 'https://www.youtube.com/',
             'Origin': 'https://www.youtube.com/'
         };
@@ -174,18 +174,25 @@ app.get('/api/stream', async (req, res) => {
             url: streamUrl,
             responseType: 'stream',
             headers: headers,
+            timeout: 20000,
             validateStatus: status => status >= 200 && status < 400
         });
 
-        const headersToForward = ['content-type', 'content-length', 'accept-ranges', 'content-range'];
+        const headersToForward = ['content-type', 'content-length', 'accept-ranges', 'content-range', 'transfer-encoding'];
         headersToForward.forEach(h => {
             if (response.headers[h]) {
                 res.setHeader(h, response.headers[h]);
             }
         });
+        
         res.status(response.status);
 
         response.data.pipe(res);
+
+        response.data.on('error', (err) => {
+            console.error('[Stream Pipe Error]:', err.message);
+            if (!res.headersSent) res.status(500).send('Stream reading error');
+        });
 
         req.on('close', () => {
             if (response.data && typeof response.data.destroy === 'function') {
@@ -194,8 +201,27 @@ app.get('/api/stream', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('[Stream Proxy Error]', error.message);
-        if (!res.headersSent) res.status(500).send('Streaming error');
+        console.error('[Stream Proxy Error 500]:', error.message);
+        if (!res.headersSent) {
+            return res.redirect(302, streamUrl);
+        }
+    }
+});
+
+app.all('/api/football/:endpoint', async (req, res) => {
+    const { endpoint } = req.params;
+    const query = req.method === 'POST' ? req.body : req.query;
+
+    const footballApis = [
+        { method: 'GET', url: `https://v3.football.api-sports.io/${endpoint}`, headers: { 'x-apisports-key': 'a0094f3392b248423f5ffb12191f90c0' }, params: query },
+        { method: 'GET', url: `https://free-api-live-football-data.p.rapidapi.com/${endpoint}`, headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'free-api-live-football-data.p.rapidapi.com' }, params: query }
+    ];
+
+    try {
+        const data = await fetchWithFallback(footballApis);
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: 'Football APIs are currently down' });
     }
 });
 
@@ -213,14 +239,13 @@ app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API endpoint not found: ${req.originalUrl}` });
 });
 
-// حماية مسار الـ index.html من التسبب في Crash
 app.get('*', (req, res) => {
     const indexPath = path.join(__dirname, 'public', 'index.html');
     res.sendFile(indexPath, (err) => {
         if (err) {
             console.error('[Error] index.html not found:', err.message);
             if (!res.headersSent) {
-                res.status(404).send('ملف index.html غير موجود في مجلد public، يرجى التأكد من رفع الملفات بشكل صحيح.');
+                res.status(404).send('ملف index.html غير موجود في مجلد public.');
             }
         }
     });
