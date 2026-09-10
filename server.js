@@ -148,7 +148,7 @@ app.all('/api/youtube/play', handleYoutubeRequest);
 app.all('/api/video', handleYoutubeRequest);
 app.all('/api/media', handleYoutubeRequest);
 
-// البروكسي الحقيقي لبث الفيديو أجزاءً بأجزاء (Real-time Chunked Streaming) باستخدام Native Node.js Requests
+// البروكسي الحقيقي لبث الفيديو أجزاءً بأجزاء (Real-time Chunked Streaming)
 app.get('/api/stream', (req, res) => {
     let streamUrl = req.query.url;
     
@@ -187,7 +187,6 @@ app.get('/api/stream', (req, res) => {
         }
 
         const proxyReq = client.request(options, (proxyRes) => {
-            // التعامل التلقائي مع الروابط المعاد توجيهها (Redirects)
             if ([301, 302, 303, 307, 308].includes(proxyRes.statusCode) && proxyRes.headers.location) {
                 proxyRes.resume();
                 let nextUrl = proxyRes.headers.location;
@@ -197,7 +196,6 @@ app.get('/api/stream', (req, res) => {
                 return doRequest(nextUrl, redirectCount + 1);
             }
 
-            // تمرير الـ Headers الأساسية ليعمل الـ Seeking والـ Chunking في المشغل
             const headersToForward = ['content-type', 'content-length', 'accept-ranges', 'content-range', 'transfer-encoding'];
             headersToForward.forEach(h => {
                 if (proxyRes.headers[h]) {
@@ -206,8 +204,6 @@ app.get('/api/stream', (req, res) => {
             });
 
             res.status(proxyRes.statusCode);
-            
-            // ضخ الـ Chunks للمتصفح أولاً بأول (Real-time buffering)
             proxyRes.pipe(res);
 
             proxyRes.on('error', (err) => {
@@ -244,7 +240,7 @@ app.all('/api/football/:endpoint', async (req, res) => {
         const data = await fetchWithFallback(footballApis);
         res.json(data);
     } catch (err) {
-        res.status(500).json({ error: 'Football APIs are currently down'ADIAN' });
+        res.status(500).json({ error: 'Football APIs are currently down' });
     }
 });
 
