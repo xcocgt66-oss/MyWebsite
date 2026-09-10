@@ -1,405 +1,176 @@
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-const axios = require("axios");
-const path = require("path");
-const fs = require("fs");
-const crypto = require("crypto");
+const express = require('express'); //
+const axios = require('axios'); //
+const http = require('http');
+const { Server } = require('socket.io'); //[cite: 4]
+const fs = require('fs');
+const path = require('path');
+const ytdl = require('@distube/ytdl-core'); //[cite: 4]
 
 const app = express();
 const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: '*' } }); //[cite: 4]
 
-const io = new Server(server, { cors: { origin: "*" } });
+app.use(express.json()); //[cite: 4]
 
-app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
+const RAPID_API_KEY = '515f7a3162mshb63efcc57b50884p106404jsn51481b32a788';
 
-// ======================================================
-// CONFIG
-// ======================================================
-const PORT = process.env.PORT || 3000;
-const MEDIA_DIR = path.join(__dirname, "temp_media");
-
-// ======================================================
-// RAPIDAPI
-// ======================================================
-const RAPIDAPI_KEY = "29d69a66b8mshfb03616392e2290p1d3431jsn75b74534c75b";
-const YOUTUBE_HOST = "youtube-info-download-api.p.rapidapi.com";
-const YOUTUBE_SEARCH_HOST = "youtube-v2.p.rapidapi.com";
-const TIKTOK_SEARCH_HOST = "tiktok-api6.p.rapidapi.com";
-const SPORTS_HOST = "all-sport-live-stream.p.rapidapi.com";
-
-// ======================================================
-// TEMP DIRECTORY
-// ======================================================
-if (!fs.existsSync(MEDIA_DIR)) {
-    fs.mkdirSync(MEDIA_DIR, { recursive: true });
-}
-
-// ======================================================
-// TEMP FILE CLEANUP
-// ======================================================
-const MAX_FILE_AGE = 10 * 60 * 1000;
-
-function cleanupOldFiles() {
-    try {
-        const files = fs.readdirSync(MEDIA_DIR);
-        for (const file of files) {
-            const filePath = path.join(MEDIA_DIR, file);
-            try {
-                const stat = fs.statSync(filePath);
-                if (Date.now() - stat.mtimeMs > MAX_FILE_AGE) {
-                    fs.unlinkSync(filePath);
-                    console.log("🗑️ Deleted old file:", file);
-                }
-            } catch (err) {}
-        }
-    } catch (err) {
-        console.error("Cleanup error:", err.message);
-    }
-}
-setInterval(cleanupOldFiles, 60 * 1000);
-
-// ======================================================
-// HELPERS
-// ======================================================
-function createFileName() {
-    return crypto.randomBytes(20).toString("hex") + ".mp3";
-}
-
-function getSafeFileName(file) {
-    return path.basename(file);
-}
-
-function getYouTubeVideoId(input) {
-    try {
-        const url = new URL(input);
-        if (url.hostname.includes("youtube.com")) {
-            const videoId = url.searchParams.get("v");
-            if (videoId) return videoId;
-            const shorts = url.pathname.match(/\/shorts\/([^/?]+)/);
-            if (shorts) return shorts[1];
-            const embed = url.pathname.match(/\/embed\/([^/?]+)/);
-            if (embed) return embed[1];
-        }
-        if (url.hostname === "youtu.be") {
-            return url.pathname.replace("/", "").split("?")[0];
-        }
-    } catch (err) {
-        if (input && !input.includes("/") && !input.includes(" ")) return input;
-    }
-    return null;
-}
-
-// ======================================================
-// DOWNLOAD URL TO SERVER
-// ======================================================
-async function downloadAudio(url) {
-    const fileName = createFileName();
-    const filePath = path.join(MEDIA_DIR, fileName);
-
-    console.log("⬇️ Downloading audio... URL:", url.substring(0, 150));
-
-    const response = await axios({
-        method: "GET",
-        url: url,
-        responseType: "stream",
-        timeout: 180000,
-        maxRedirects: 10,
-        headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36",
-            "Accept": "*/*"
-        }
-    });
-
-    const writer = fs.createWriteStream(filePath);
-
-    try {
-        await new Promise((resolve, reject) => {
-            response.data.pipe(writer);
-            writer.on("finish", resolve);
-            writer.on("error", reject);
-            response.data.on("error", reject);
-        });
-    } catch (err) {
-        try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch {}
-        throw err;
-    }
-
-    const stat = fs.statSync(filePath);
-    console.log("✅ Audio saved:", fileName, "| 📦 Size:", (stat.size / 1024 / 1024).toFixed(2), "MB");
-    return fileName;
-}
-
-// ======================================================
-// FIND MEDIA OBJECTS
-// ======================================================
-function collectMediaObjects(value, output = []) {
-    if (!value) return output;
-    if (Array.isArray(value)) {
-        for (const item of value) collectMediaObjects(item, output);
-        return output;
-    }
-    if (typeof value !== "object") return output;
-
-    const url = value.url || value.link || value.downloadUrl || value.download_url || value.audio || value.audioUrl;
-    
-    if (typeof url === "string" && url.startsWith("http")) {
-        output.push({
-            url: url,
-            quality: value.quality || value.audio_quality || "",
-            ext: value.ext || "mp3"
-        });
-    }
-
-    for (const key of Object.keys(value)) {
-        collectMediaObjects(value[key], output);
-    }
-    return output;
-}
-
-function chooseAudio(data) {
-    const media = collectMediaObjects(data);
-    const unique = Array.from(new Map(media.map(item => [item.url, item])).values());
-    console.log("🎵 Found media links:", unique.length);
-    return unique[0]?.url || data.link || data.url || null;
-}
-
-// ======================================================
-// EXTRACT TIKTOK SEARCH DATA
-// ======================================================
-function extractTikTokSearch(data, output = []) {
-    if (!data) return output;
-    if (Array.isArray(data)) {
-        for (const item of data) extractTikTokSearch(item, output);
-        return output;
-    }
-    if (typeof data === 'object') {
-        if (data.aweme_info && data.aweme_info.video && data.aweme_info.video.play_addr) {
-            const playUrl = data.aweme_info.video.play_addr.url_list?.[0];
-            if (playUrl) {
-                output.push({
-                    title: data.aweme_info.desc || "بدون عنوان",
-                    play: playUrl,
-                    cover: data.aweme_info.video.cover?.url_list?.[0] || ""
-                });
-            }
-        } else {
-            for (const key of Object.keys(data)) extractTikTokSearch(data[key], output);
-        }
-    }
-    return output;
-}
-
-// ======================================================
-// CHAT
-// ======================================================
-let onlineUsers = {};
-
-io.on("connection", socket => {
-    socket.on("user_join", username => {
-        onlineUsers[socket.id] = String(username || "مجهول");
-        io.emit("update_users", Object.values(onlineUsers));
-    });
-
-    socket.on("send_message", data => {
-        const sender = onlineUsers[socket.id] || "مجهول";
-        const text = String(data?.text || "");
-        io.emit("receive_message", {
-            user: sender,
-            text: text,
-            timestamp: new Date().toLocaleTimeString()
-        });
-
-        const mentioned = Object.keys(onlineUsers).find(id => text.includes(`@${onlineUsers[id]}`));
-        if (mentioned) {
-            io.to(mentioned).emit("ping_notification", { from: sender });
-        }
-    });
-
-    socket.on("disconnect", () => {
-        delete onlineUsers[socket.id];
-        io.emit("update_users", Object.values(onlineUsers));
-    });
-});
-
-// ======================================================
-// YOUTUBE SEARCH API
-// ======================================================
-app.get("/api/youtube/search", async (req, res) => {
-    try {
-        const query = req.query.q;
-        if (!query) return res.status(400).json({ error: "أدخل كلمة البحث" });
-
-        const response = await axios.get(`https://${YOUTUBE_SEARCH_HOST}/search/`, {
-            params: { query: query },
-            headers: {
-                "X-RapidAPI-Key": RAPIDAPI_KEY,
-                "X-RapidAPI-Host": YOUTUBE_SEARCH_HOST
-            }
-        });
-        
-        return res.json(response.data);
-    } catch (error) {
-        console.error("YouTube Search Error:", error.message);
-        return res.status(500).json({ error: "فشل البحث في يوتيوب" });
-    }
-});
-
-// ======================================================
-// YOUTUBE API (PLAY / DOWNLOAD MP3)
-// ======================================================
-app.get("/api/youtube/play", async (req, res) => {
-    try {
-        const youtubeUrl = String(req.query.url || "").trim();
-        if (!youtubeUrl) return res.status(400).json({ success: false, error: "أدخل رابط YouTube" });
-
-        const videoId = getYouTubeVideoId(youtubeUrl);
-        if (!videoId) return res.status(400).json({ success: false, error: "رابط YouTube غير صحيح" });
-
-        const targetUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        const endpoint = `https://${YOUTUBE_HOST}/ajax/download.php`;
-
-        const response = await axios.get(endpoint, {
-            params: {
-                format: "mp3",
-                add_info: "0",
-                url: targetUrl,
-                audio_quality: "128",
-                allow_extended_duration: "false",
-                no_merge: "false",
-                audio_language: "en"
-            },
-            headers: {
-                "Content-Type": "application/json",
-                "x-rapidapi-host": YOUTUBE_HOST,
-                "x-rapidapi-key": RAPIDAPI_KEY
-            },
-            timeout: 60000
-        });
-
-        const directUrl = chooseAudio(response.data);
-        if (!directUrl) return res.status(422).json({ success: false, error: "API لم يرجع رابط التحميل", videoId, apiResponse: response.data });
-
-        const fileName = await downloadAudio(directUrl);
-
-        return res.json({
-            success: true,
-            videoId: videoId,
-            file: fileName,
-            url: `/api/media/${encodeURIComponent(fileName)}`
-        });
-
-    } catch (error) {
-        console.error("❌ YouTube Error", error.message);
-        return res.status(error.response?.status || 500).json({
-            success: false,
-            error: "فشل تحميل ملف YouTube",
-            details: error.response?.data || error.message
-        });
-    }
-});
-
-// ======================================================
-// MEDIA STREAM
-// ======================================================
-app.get("/api/media/:file", (req, res) => {
-    const file = getSafeFileName(req.params.file);
-    const filePath = path.join(MEDIA_DIR, file);
-
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "الملف غير موجود" });
-
-    const stat = fs.statSync(filePath);
-    const size = stat.size;
-    const range = req.headers.range;
-
-    res.setHeader("Accept-Ranges", "bytes");
-    res.setHeader("Content-Type", "audio/mpeg");
-
-    if (!range) {
-        res.setHeader("Content-Length", size);
-        return fs.createReadStream(filePath).pipe(res);
-    }
-
-    const parts = range.replace(/bytes=/, "").split("-");
-    const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : size - 1;
-
-    if (Number.isNaN(start) || start >= size) {
-        return res.status(416).set("Content-Range", `bytes */${size}`).end();
-    }
-
-    const chunkSize = end - start + 1;
-    res.status(206);
-    res.setHeader("Content-Range", `bytes ${start}-${end}/${size}`);
-    res.setHeader("Content-Length", chunkSize);
-    fs.createReadStream(filePath, { start, end }).pipe(res);
-});
-
-app.delete("/api/media/:file", (req, res) => {
-    const file = getSafeFileName(req.params.file);
-    const filePath = path.join(MEDIA_DIR, file);
-    if (fs.existsSync(filePath)) {
+// ==========================================
+// 1. نظام التبديل التلقائي (Fallback Logic)
+// ==========================================
+async function fetchWithFallback(apiList) {
+    for (let i = 0; i < apiList.length; i++) {
         try {
-            fs.unlinkSync(filePath);
-            console.log("🗑️ Deleted:", file);
+            console.log(`Trying API ${i + 1}...`);
+            const response = await axios(apiList[i]); //[cite: 4]
+            return response.data; 
         } catch (error) {
-            return res.status(500).json({ success: false, error: "تعذر حذف الملف" });
+            console.error(`API ${i + 1} Failed: ${error.message}`);
+            // إذا كان هذا آخر API وفشل، قم برمي الخطأ
+            if (i === apiList.length - 1) throw new Error('All APIs failed to respond.');
         }
     }
-    return res.json({ success: true });
-});
+}
 
-// ======================================================
-// TIKTOK SEARCH API
-// ======================================================
-app.post("/api/tiktok/search", async (req, res) => {
+// ==========================================
+// 2. Football APIs
+// ==========================================
+app.get('/api/football/:endpoint', async (req, res) => {
+    const { endpoint } = req.params;
+    const query = req.query; 
+    
+    const footballApis = [
+        {
+            method: 'GET',
+            url: `https://v3.football.api-sports.io/${endpoint}`,
+            headers: { 'x-apisports-key': 'a0094f3392b248423f5ffb12191f90c0' },
+            params: query
+        },
+        {
+            method: 'GET',
+            url: `https://free-api-live-football-data.p.rapidapi.com/${endpoint}`,
+            headers: { 
+                'X-Rapidapi-Key': RAPID_API_KEY, 
+                'X-Rapidapi-Host': 'free-api-live-football-data.p.rapidapi.com' 
+            },
+            params: query
+        }
+    ];
+
     try {
-        const { query } = req.body;
-        if (!query) return res.status(400).json({ error: "أدخل كلمة البحث" });
-
-        const response = await axios.post(`https://${TIKTOK_SEARCH_HOST}/search/general/query`, {
-            query: query,
-            cursor: 0,
-            sort_type: "0"
-        }, {
-            headers: {
-                "X-RapidAPI-Key": RAPIDAPI_KEY,
-                "X-RapidAPI-Host": TIKTOK_SEARCH_HOST,
-                "Content-Type": "application/json"
-            }
-        });
-
-        const extractedVideos = extractTikTokSearch(response.data);
-        return res.json(extractedVideos);
-    } catch (error) {
-        console.error("TikTok Search Error:", error.message);
-        return res.status(500).json({ error: "فشل البحث في تيك توك" });
+        const data = await fetchWithFallback(footballApis);
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: 'Football APIs are currently down' });
     }
 });
 
-// ======================================================
-// SPORTS / LIVE MATCHES API (All Sport Live Stream)
-// ======================================================
-app.get("/api/football/server2", async (req, res) => {
+// ==========================================
+// 3. TikTok APIs
+// ==========================================
+app.get('/api/tiktok/info', async (req, res) => {
+    const { url } = req.query; // رابط التيك توك
+
+    const tiktokApis = [
+        {
+            method: 'GET',
+            url: `https://tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com/rich_response/index`,
+            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com' },
+            params: { url }
+        },
+        {
+            method: 'GET',
+            url: `https://tiktok-full-info-without-watermark.p.rapidapi.com/index`,
+            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'tiktok-full-info-without-watermark.p.rapidapi.com' },
+            params: { url }
+        },
+        {
+            method: 'GET',
+            url: `https://tiktok-downloader-simple.p.rapidapi.com/tiksnapsave/`,
+            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'tiktok-downloader-simple.p.rapidapi.com' },
+            params: { link: url }
+        }
+    ];
+
     try {
-        const response = await axios.get(`https://${SPORTS_HOST}/esid`, {
-            headers: {
-                "Content-Type": "application/json",
-                "x-rapidapi-host": SPORTS_HOST,
-                "x-rapidapi-key": RAPIDAPI_KEY
-            }
-        });
-        return res.json(response.data);
-    } catch (error) {
-        console.error("Sports API Error:", error.response?.data || error.message);
-        return res.status(500).json({ error: "فشل جلب المباريات، السيرفر قد يكون متوقفاً مؤقتاً" });
+        const data = await fetchWithFallback(tiktokApis);
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: 'TikTok APIs are currently down' });
     }
 });
 
-// ======================================================
-// START
-// ======================================================
+// ==========================================
+// 4. Live Streams APIs
+// ==========================================
+app.get('/api/livestream', async (req, res) => {
+    const streamApis = [
+        {
+            method: 'GET',
+            url: `https://all-sport-live-stream.p.rapidapi.com/esid`,
+            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'all-sport-live-stream.p.rapidapi.com' }
+        }
+        // يمكنك إضافة مصادر بث احتياطية أخرى هنا مستقبلاً
+    ];
+
+    try {
+        const data = await fetchWithFallback(streamApis);
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: 'Live Stream API is currently down' });
+    }
+});
+
+// ==========================================
+// 5. YouTube: التحميل في السيرفر والحذف عند الخروج
+// ==========================================
+const DOWNLOAD_DIR = path.join(__dirname, 'downloads');
+if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR);
+
+io.on('connection', (socket) => { //[cite: 4]
+    console.log(`User connected: ${socket.id}`);
+    const userVideoPath = path.join(DOWNLOAD_DIR, `${socket.id}.mp4`);
+
+    socket.on('request_video', async (youtubeUrl) => {
+        try {
+            // باستخدام ytdl-core المدمج كونه الأفضل في تحميل مسار الفيديو كـ Stream[cite: 4]
+            const videoStream = ytdl(youtubeUrl, { quality: 'lowest' }); //[cite: 4]
+            const writeStream = fs.createWriteStream(userVideoPath);
+            
+            videoStream.pipe(writeStream);
+
+            writeStream.on('finish', () => {
+                // إبلاغ العميل بأن الفيديو جاهز للعمل 
+                socket.emit('video_ready', `/stream/${socket.id}`);
+            });
+            
+        } catch (error) {
+            socket.emit('video_error', 'حدث خطأ أثناء تحميل الفيديو.');
+        }
+    });
+
+    // استشعار خروج المستخدم (إغلاق المتصفح أو الصفحة)
+    socket.on('disconnect', () => { //[cite: 4]
+        console.log(`User disconnected: ${socket.id}`);
+        // مسح الفيديو الخاص بهذا المستخدم من السيرفر فوراً
+        if (fs.existsSync(userVideoPath)) {
+            fs.unlinkSync(userVideoPath);
+            console.log(`Video deleted for user: ${socket.id}`);
+        }
+    });
+});
+
+// مسار تشغيل الفيديو (Stream) للمستخدم
+app.get('/stream/:id', (req, res) => { //[cite: 4]
+    const videoPath = path.join(DOWNLOAD_DIR, `${req.params.id}.mp4`);
+    if (fs.existsSync(videoPath)) {
+        res.sendFile(videoPath); //[cite: 4]
+    } else {
+        res.status(404).send('Video not found or already deleted.');
+    }
+});
+
+// تشغيل السيرفر
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log("🚀 السيرفر شغال على http://localhost:" + PORT);
+    console.log(`Server is running on port ${PORT}`);
 });
