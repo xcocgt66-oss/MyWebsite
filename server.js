@@ -54,7 +54,7 @@ app.all('/api/tiktok/play', handleTikTokRequest);
 app.all('/api/download', handleTikTokRequest);
 
 // ==========================================
-// 2. مسارات اليوتيوب والفيديو (عبر RapidAPI السريع والمضمون)
+// 2. مسارات اليوتيوب والفيديو (تضمين كافة المفاتيح المحتملة للواجهة)
 // ==========================================
 const handleYoutubeRequest = async (req, res) => {
     const url = req.body.url || req.query.url;
@@ -77,11 +77,17 @@ const handleYoutubeRequest = async (req, res) => {
 
     try {
         const data = await fetchWithFallback(youtubeApis);
-        // تنسيق الرد بما تتوقعه واجهتك الأمامية
+        const mediaUrl = data.link || data.url || data.videos?.items?.[0]?.url || data.formats?.[0]?.url || data.audio?.[0]?.url || '';
+        
+        // نرسل جميع المفاتيح المحتملة لترضى الواجهة أياً كانت الطريقة التي تبرمجت بها
         res.json({
             success: true,
-            stream_url: data.link || data.url || data.videos?.items?.[0]?.url || data.formats?.[0]?.url,
-            title: data.title || 'YouTube Video'
+            url: mediaUrl,
+            link: mediaUrl,
+            stream_url: mediaUrl,
+            file: mediaUrl,
+            title: data.title || 'YouTube Video',
+            data: data
         });
     } catch (error) {
         res.status(500).json({ error: 'حدث خطأ أثناء جلب الفيديو.' });
