@@ -24,6 +24,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const RAPID_API_KEY = '515f7a3162mshb63efcc57b50884p106404jsn51481b32a788';
+// مفتاح مخصص لـ youtube-media-downloader.p.rapidapi.com (مؤكد أنه يعمل)
+const YT_MEDIA_DOWNLOADER_KEY = '29d69a66b8mshfb03616392e2290p1d3431jsn75b74534c75b';
 
 async function fetchWithFallback(apiList) {
     for (let i = 0; i < apiList.length; i++) {
@@ -91,15 +93,19 @@ const handleYoutubeRequest = async (req, res) => {
     const youtubeApis = [
         {
             method: 'GET',
-            url: 'https://yt-api.p.rapidapi.com/dl',
-            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'yt-api.p.rapidapi.com' },
-            params: { id: videoId }
+            url: 'https://youtube-media-downloader.p.rapidapi.com/v2/video/details',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-rapidapi-key': YT_MEDIA_DOWNLOADER_KEY,
+                'x-rapidapi-host': 'youtube-media-downloader.p.rapidapi.com'
+            },
+            params: { videoId: videoId, url: `https://www.youtube.com/watch?v=${videoId}` }
         },
         {
             method: 'GET',
-            url: 'https://youtube-media-downloader.p.rapidapi.com/v2/video/details',
-            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'youtube-media-downloader.p.rapidapi.com' },
-            params: { url: `https://www.youtube.com/watch?v=${videoId}` }
+            url: 'https://yt-api.p.rapidapi.com/dl',
+            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'yt-api.p.rapidapi.com' },
+            params: { id: videoId }
         }
     ];
 
