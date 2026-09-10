@@ -103,44 +103,60 @@ const handleYoutubeRequest = async (req, res) => {
         }
     ];
 
+    // بدلاً من التوقف عند أول API ينجح، نجرب كل الـ APIs ونجمع كل الروابط الصالحة
+    // كخيارات احتياطية (fallback) - إذا تعطل أو خُنق الرابط الأول، الواجهة تنتقل تلقائياً للتالي
+    const candidates = [];
+    let videoTitle = 'YouTube Video';
+
+    const pushCandidate = (streamUrl) => {
+        if (streamUrl && typeof streamUrl === 'string' && !candidates.includes(streamUrl)) {
+            candidates.push(streamUrl);
+        }
+    };
+
     for (const apiConfig of youtubeApis) {
         try {
             const response = await axios(apiConfig);
             const data = response.data;
-            let streamUrl = '';
-            let videoTitle = data.title || 'YouTube Video';
+
+            if (data.title && videoTitle === 'YouTube Video') {
+                videoTitle = data.title;
+            }
 
             if (data.formats && Array.isArray(data.formats)) {
+                // أفضل صيغة (فيديو + صوت مدمج) أولاً
                 const combinedFormat = data.formats.find(f => f.url && f.hasVideo !== false && f.hasAudio !== false) ||
                                        data.formats.find(f => f.url && f.mimeType && f.mimeType.includes('video/mp4'));
-                if (combinedFormat) {
-                    streamUrl = combinedFormat.url;
-                }
+                pushCandidate(combinedFormat?.url);
+
+                // أضف صيغ mp4 إضافية كخيارات احتياطية إن وُجدت
+                data.formats
+                    .filter(f => f.url && f.mimeType && f.mimeType.includes('video/mp4'))
+                    .slice(0, 3)
+                    .forEach(f => pushCandidate(f.url));
             }
 
-            if (!streamUrl && data.videos && Array.isArray(data.videos.items) && data.videos.items.length > 0) {
-                const item = data.videos.items[0];
-                streamUrl = item?.url || item?.link;
+            if (data.videos && Array.isArray(data.videos.items) && data.videos.items.length > 0) {
+                data.videos.items.slice(0, 2).forEach(item => pushCandidate(item?.url || item?.link));
             }
 
-            if (!streamUrl) {
-                streamUrl = data.link || data.url || data.download_url;
-            }
-
-            if (streamUrl) {
-                return res.json({
-                    success: true,
-                    url: streamUrl,
-                    link: streamUrl,
-                    title: videoTitle
-                });
-            }
+            pushCandidate(data.link || data.url || data.download_url);
         } catch (err) {
             console.error(`[Error] Endpoint failed: ${apiConfig.url}`, err.message);
         }
     }
 
-    return res.status(500).json({ success: false, error: 'تعذر استخراج رابط قابل للتشغيل داخل المشغل.' });
+    if (candidates.length > 0) {
+        return res.json({
+            success: true,
+            url: candidates[0],
+            link: candidates[0],
+            sources: candidates,
+            title: videoTitle
+        });
+    }
+
+    return res.status(500).json({ success: false, error: 'تعذر استخراج رابط قابل للتشغيل داخل المشغل من أي مصدر.' });
 };
 
 app.all('/api/youtube', handleYoutubeRequest);
