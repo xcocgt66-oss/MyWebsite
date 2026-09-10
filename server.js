@@ -54,7 +54,7 @@ app.all('/api/tiktok/play', handleTikTokRequest);
 app.all('/api/download', handleTikTokRequest);
 
 // ==========================================
-// 2. مسارات اليوتيوب والفيديو (تضمين كافة المفاتيح المحتملة للواجهة)
+// 2. مسارات اليوتيوب بجودة عالية (720p+)
 // ==========================================
 const handleYoutubeRequest = async (req, res) => {
     const url = req.body.url || req.query.url;
@@ -77,20 +77,30 @@ const handleYoutubeRequest = async (req, res) => {
 
     try {
         const data = await fetchWithFallback(youtubeApis);
-        const mediaUrl = data.link || data.url || data.videos?.items?.[0]?.url || data.formats?.[0]?.url || data.audio?.[0]?.url || '';
         
-        // نرسل جميع المفاتيح المحتملة لترضى الواجهة أياً كانت الطريقة التي تبرمجت بها
+        // البحث عن أفضل جودة متاحة (تفضيل 720p أو أعلى إذا وجدت في القوائم)
+        let mediaUrl = '';
+        if (data.formats && Array.isArray(data.formats)) {
+            const hdFormat = data.formats.find(f => f.quality === '720p' || f.height >= 720) || data.formats[0];
+            mediaUrl = hdFormat?.url || '';
+        }
+        
+        if (!mediaUrl) {
+            mediaUrl = data.link || data.url || data.videos?.items?.[0]?.url || data.audio?.[0]?.url || '';
+        }
+        
         res.json({
             success: true,
             url: mediaUrl,
             link: mediaUrl,
             stream_url: mediaUrl,
             file: mediaUrl,
+            quality: '720p+',
             title: data.title || 'YouTube Video',
             data: data
         });
     } catch (error) {
-        res.status(500).json({ error: 'حدث خطأ أثناء جلب الفيديو.' });
+        res.status(500).json({ error: 'حدث خطأ أثناء جلب الفيديو بجودة عالية.' });
     }
 };
 
@@ -120,21 +130,50 @@ app.all('/api/football/:endpoint', async (req, res) => {
 });
 
 // ==========================================
-// 4. نظام الشات و Socket.io
+// 4. نظام الشات و Socket.io (إصلاح مشكلة Undefined والمتصلين)
 // ==========================================
+const onlineUsers = new Map();
+
 io.on('connection', (socket) => {
-    console.log(`User connected: ${socket.id}`);
+    // تعيين اسم مؤقت فريد لتجنب الـ undefined حتى لو لم ترسله الواجهة
+    let currentUsername = `User_${socket.id.substring(0, 4)}`;
+    onlineUsers.set(socket.id, currentUsername);
 
-    socket.on('send_message', (messageData) => {
-        io.emit('receive_message', messageData);
+    // تحديث قائمة المتصلين للجميع
+    io.emit('update_online_users', Array.from(onlineUsers.values()));
+
+    // استقبال اسم المستخدم الحقيقي من الواجهة إن وجد
+    socket.on('set_username', (name) => {
+        if (name && name !== 'undefined' && name.trim() !== '') {
+            currentUsername = name.trim();
+            onlineUsers.set(socket.id, currentUsername);
+            io.emit('update_online_users', Array.from(onlineUsers.values()));
+        }
     });
 
-    socket.on('chat_message', (msg) => {
-        io.emit('chat_message', msg);
-    });
+    // استقبال وإرسال الرسائل مع ضمان عدم ظهور undefined
+    const handleIncomingMessage = (msgData) => {
+        let username = currentUsername;
+        let messageText = '';
+
+        if (typeof msgData === 'object' && msgData !== null) {
+            username = (msgData.username && msgData.username !== 'undefined') ? msgData.username : currentUsername;
+            messageText = msgData.message || msgData.text || '';
+        } else {
+            messageText = String(msgData);
+        }
+
+        const finalPackage = { username, message: messageText, time: new Date().toLocaleTimeString() };
+        io.emit('receive_message', finalPackage);
+        io.emit('chat_message', finalPackage);
+    };
+
+    socket.on('send_message', handleIncomingMessage);
+    socket.on('chat_message', handleIncomingMessage);
 
     socket.on('disconnect', () => {
-        console.log(`User disconnected: ${socket.id}`);
+        onlineUsers.delete(socket.id);
+        io.emit('update_online_users', Array.from(onlineUsers.values()));
     });
 });
 
