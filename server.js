@@ -20,9 +20,9 @@ async function fetchWithFallback(apiList) {
     for (let i = 0; i < apiList.length; i++) {
         try {
             const response = await axios(apiList[i]);
-            return response.data;
+            if (response.data) return response.data;
         } catch (error) {
-            if (i === apiList.length - 1) throw new Error('All APIs failed to respond.');
+            if (i === apiList.length - 1) throw new Error('جميع الـ APIs فشلت في الرد.');
         }
     }
 }
@@ -51,7 +51,7 @@ app.all('/api/download', handleTikTokRequest);
 
 const handleYoutubeRequest = async (req, res) => {
     const url = req.body.url || req.query.url;
-    const quality = req.body.quality || req.query.quality || '480';
+    const quality = req.body.quality || req.query.quality || '360';
 
     if (!url) return res.status(400).json({ error: 'الرجاء توفير رابط يوتيوب' });
 
@@ -65,86 +65,66 @@ const handleYoutubeRequest = async (req, res) => {
         videoId = url.split('shorts/')[1]?.split('?')[0];
     }
 
-    // 1. استخدام API الرئيسي المحدد
-    try {
-        console.log(`[YouTube API] Fetching video ID: ${videoId} with quality: ${quality}`);
-        const response = await axios.get(
-            `https://youtube-video-fast-downloader-24-7.p.rapidapi.com/download_audio/${videoId}`,
-            {
-                params: { quality: quality },
-                headers: {
-                    'X-Rapidapi-Key': RAPID_API_KEY,
-                    'X-Rapidapi-Host': 'youtube-video-fast-downloader-24-7.p.rapidapi.com',
-                    'Content-Type': 'application/json'
-                },
-                timeout: 15000
-            }
-        );
+    console.log(`[YouTube API] Fetching Video ID: ${videoId}`);
 
-        const data = response.data;
-        const mediaUrl = data.link || data.url || data.download_url || data.stream_url;
-
-        if (mediaUrl) {
-            console.log(`[Success] Retrieved direct stream with requested quality (${quality}p)`);
-            return res.json({
-                success: true,
-                url: mediaUrl,
-                link: mediaUrl,
-                stream_url: mediaUrl,
-                file: mediaUrl,
-                title: data.title || `YouTube Video (${quality}p)`
-            });
-        }
-    } catch (err) {
-        console.error('[Error] Main Fast Downloader API failed:', err.message);
-    }
-
-    // 2. المحاولة الاحتياطية في حال تعثر الـ API الرئيسي
-    console.log('[Info] Falling back to secondary RapidAPI endpoints...');
     const youtubeApis = [
-        {
-            method: 'GET',
-            url: 'https://youtube-media-downloader.p.rapidapi.com/v2/video/details',
-            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'youtube-media-downloader.p.rapidapi.com' },
-            params: { url: url }
-        },
+        // API 1: yt-api (يحصل على كافة الصيغ)
         {
             method: 'GET',
             url: 'https://yt-api.p.rapidapi.com/dl',
             headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'yt-api.p.rapidapi.com' },
             params: { id: videoId }
+        },
+        // API 2: youtube-media-downloader
+        {
+            method: 'GET',
+            url: 'https://youtube-media-downloader.p.rapidapi.com/v2/video/details',
+            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'youtube-media-downloader.p.rapidapi.com' },
+            params: { url: `https://www.youtube.com/watch?v=${videoId}` }
         }
     ];
 
-    try {
-        const data = await fetchWithFallback(youtubeApis);
-        let fallbackUrl = '';
+    for (const apiConfig of youtubeApis) {
+        try {
+            const response = await axios(apiConfig);
+            const data = response.data;
+            let streamUrl = '';
+            let videoTitle = data.title || 'YouTube Video';
 
-        if (Array.isArray(data.formats) && data.formats.length > 0) {
-            const playable = data.formats.filter(f => f.url && f.hasAudio !== false);
-            if (playable.length > 0) fallbackUrl = playable[0].url;
+            // تصفية الفيديوهات للتأكد من اختيار صيغة تحتوي على (صوت + فيديو معاً)
+            if (data.formats && Array.isArray(data.formats)) {
+                // البحث عن صيغة بها صوت وفيديو معاً
+                const combinedFormat = data.formats.find(f => f.url && f.hasVideo !== false && f.hasAudio !== false) ||
+                                       data.formats.find(f => f.url && f.mimeType && f.mimeType.includes('video/mp4'));
+                if (combinedFormat) {
+                    streamUrl = combinedFormat.url;
+                }
+            }
+
+            if (!streamUrl && data.videos && data.videos.items) {
+                const item = data.videos.items[0];
+                streamUrl = item?.url || item?.link;
+            }
+
+            if (!streamUrl) {
+                streamUrl = data.link || data.url || data.download_url;
+            }
+
+            if (streamUrl) {
+                console.log(`[Success] Found playable URL for ID: ${videoId}`);
+                return res.json({
+                    success: true,
+                    url: streamUrl,
+                    link: streamUrl,
+                    title: videoTitle
+                });
+            }
+        } catch (err) {
+            console.error(`[Error] Endpoint failed: ${apiConfig.url}`, err.message);
         }
-
-        if (!fallbackUrl) {
-            fallbackUrl = data.link || data.url;
-        }
-
-        if (!fallbackUrl) {
-            return res.json({ success: false, error: 'لم نجد رابط لمشاهدة هذا الفيديو.' });
-        }
-
-        res.json({
-            success: true,
-            url: fallbackUrl,
-            link: fallbackUrl,
-            stream_url: fallbackUrl,
-            file: fallbackUrl,
-            title: data.title || 'YouTube Video'
-        });
-    } catch (error) {
-        console.error("Youtube API Error:", error.message);
-        res.status(500).json({ error: 'حدث خطأ أثناء الاتصال بالـ API.' });
     }
+
+    return res.status(500).json({ success: false, error: 'تعذر استخراج رابط قابل للتشغيل داخل المشغل.' });
 };
 
 app.all('/api/youtube', handleYoutubeRequest);
