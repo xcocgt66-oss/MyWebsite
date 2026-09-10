@@ -14,7 +14,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const APIFY_TOKEN = 'apify_api_XHfc2DEoGtfX3HE8ap9zhPGoZYt62s3d1ReW';
+const VIDKRAKEN_API_KEY = '4dca474a-7265-4838-9c77-02fb574e0f60';
 const RAPID_API_KEY = '515f7a3162mshb63efcc57b50884p106404jsn51481b32a788';
 
 async function fetchWithFallback(apiList) {
@@ -54,53 +54,85 @@ const handleYoutubeRequest = async (req, res) => {
     const url = req.body.url || req.query.url;
     if (!url) return res.status(400).json({ error: 'الرجاء توفير رابط يوتيوب' });
 
-    // 1. المحاولة الرئيسية: استخدام Apify Actor (streamers/youtube-video-downloader) لجلب 1080p
+    // 1. المحاولة الرئيسية: استخدام VidKraken API (الجودة الافتراضية 720p)
     try {
-        console.log(`[Apify] Starting YouTube download task for quality 1080p...`);
-        const apifyRes = await axios.post(
-            `https://api.apify.com/v2/acts/streamers~youtube-video-downloader/run-sync-get-dataset-items?token=${APIFY_TOKEN}`,
+        console.log(`[VidKraken] Submitting download job for 720p...`);
+        const submitRes = await axios.post(
+            'https://vidkraken.com/api/v2/download',
             {
-                preferredFormat: "mp4",
-                preferredQuality: "1080p",
-                storeInKVStore: true,
-                videos: [
-                    {
-                        url: url
-                    }
-                ],
-                filenameTemplateParts: [
-                    "title"
-                ],
-                transcriptionAndSubtitle: "NONE"
+                url: url,
+                format: '720'
             },
             {
-                headers: { 'Content-Type': 'application/json' },
-                timeout: 60000 // انتظار حتى انتهاء التنفيذ سينك (Sync)
+                headers: {
+                    'Authorization': `Bearer ${VIDKRAKEN_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 10000
             }
         );
 
-        const items = apifyRes.data;
-        if (Array.isArray(items) && items.length > 0) {
-            const item = items[0];
-            const videoUrl = item.videoUrl || item.downloadUrl || item.url || (item.fileUrl ? item.fileUrl : null);
-            
-            if (videoUrl) {
-                console.log(`[Success] Fetched 1080p Direct Stream via Apify: ${videoUrl}`);
-                return res.json({
-                    success: true,
-                    url: videoUrl,
-                    link: videoUrl,
-                    stream_url: videoUrl,
-                    file: videoUrl,
-                    title: item.title || 'YouTube Video (1080p)'
-                });
+        const jobId = submitRes.data?.jobId || submitRes.data?.id || submitRes.data?.data?.jobId;
+        const initialDownloadUrl = submitRes.data?.downloadUrl || submitRes.data?.data?.downloadUrl;
+
+        if (initialDownloadUrl) {
+            console.log(`[Success] Direct Stream ready via VidKraken: ${initialDownloadUrl}`);
+            return res.json({
+                success: true,
+                url: initialDownloadUrl,
+                link: initialDownloadUrl,
+                stream_url: initialDownloadUrl,
+                file: initialDownloadUrl,
+                title: submitRes.data?.title || 'YouTube Video (720p)'
+            });
+        }
+
+        if (jobId) {
+            console.log(`[VidKraken] Job created (ID: ${jobId}), polling for status...`);
+            let attempts = 0;
+            const maxAttempts = 15; // فحص حتى 30 ثانية كحد أقصى
+
+            while (attempts < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                attempts++;
+
+                const statusRes = await axios.get(
+                    `https://vidkraken.com/api/v2/download/${jobId}`,
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${VIDKRAKEN_API_KEY}`
+                        },
+                        timeout: 5000
+                    }
+                );
+
+                const jobData = statusRes.data?.data || statusRes.data;
+                const status = jobData?.status;
+                const downloadUrl = jobData?.downloadUrl || jobData?.url;
+
+                if (downloadUrl) {
+                    console.log(`[Success] VidKraken completed 720p stream: ${downloadUrl}`);
+                    return res.json({
+                        success: true,
+                        url: downloadUrl,
+                        link: downloadUrl,
+                        stream_url: downloadUrl,
+                        file: downloadUrl,
+                        title: jobData?.title || 'YouTube Video (720p)'
+                    });
+                }
+
+                if (status === 'failed' || status === 'error') {
+                    console.error('[VidKraken] Job failed on server');
+                    break;
+                }
             }
         }
     } catch (err) {
-        console.error('[Error] Apify API failed or timed out:', err.message);
+        console.error('[Error] VidKraken API failed:', err.response?.data || err.message);
     }
 
-    // 2. المحاولة الاحتياطية: RapidAPI في حال تعثر Apify
+    // 2. المحاولة الاحتياطية: RapidAPI في حال تعثر VidKraken
     console.log('[Info] Falling back to RapidAPI...');
     const youtubeApis = [
         {
