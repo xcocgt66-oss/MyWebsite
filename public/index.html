@@ -56,7 +56,7 @@
 
         <main class="flex-1 p-8 overflow-y-auto">
             <div id="tab-youtube" class="tab-content">
-                <h2 class="text-2xl font-bold mb-6 text-white">مشغل يوتيوب (عبر الـ API)</h2>
+                <h2 class="text-2xl font-bold mb-6 text-white">مشغل يوتيوب (عبر الـ API المتعدد)</h2>
                 <div class="mb-6 flex gap-2">
                     <input type="text" id="yt-link-input" placeholder="أدخل معرف أو رابط يوتيوب..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500">
                     <button onclick="streamYoutubeVideoViaAPI()" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-white font-medium">تشغيل</button>
@@ -90,16 +90,16 @@
                 const escScreen = document.getElementById('esc-screen');
                 if (isEscActive) {
                     escScreen.classList.remove('hidden');
-                    const iframe = document.querySelector('#youtube-feed iframe');
-                    if (iframe) {
-                        iframe.dataset.src = iframe.src;
-                        iframe.src = '';
+                    const activePlayer = document.querySelector('#youtube-feed iframe');
+                    if (activePlayer) {
+                        activePlayer.dataset.src = activePlayer.src;
+                        activePlayer.src = '';
                     }
                 } else {
                     escScreen.classList.add('hidden');
-                    const iframe = document.querySelector('#youtube-feed iframe');
-                    if (iframe && iframe.dataset.src) {
-                        iframe.src = iframe.dataset.src;
+                    const activePlayer = document.querySelector('#youtube-feed iframe');
+                    if (activePlayer && activePlayer.dataset.src) {
+                        activePlayer.src = activePlayer.dataset.src;
                     }
                 }
                 return;
@@ -168,15 +168,35 @@
                 videoId = url;
             }
 
+            const apiEndpoints = [
+                `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&vq=hd1080`,
+                `https://www.youtube.com/embed/${videoId}?autoplay=1&vq=hd1080`,
+                `https://www.youtube.com/embed/${videoId}?autoplay=1`
+            ];
+
+            let currentApiIndex = 0;
             const container = document.getElementById('youtube-feed');
-            container.innerHTML = `
-                <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex flex-col items-center gap-3">
-                    <p class="text-xs text-emerald-400">البث يعمل بأعلى جودة (HD)</p>
-                    <div class="aspect-video w-full rounded-xl overflow-hidden shadow-lg bg-black">
-                        <iframe class="w-full h-full" src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&vq=hd1080" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+            function tryNextApi() {
+                if (currentApiIndex >= apiEndpoints.length) {
+                    container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-rose-500">عذراً، فشلت جميع الـ APIs في تشغيل هذا الفيديو. حاول بتعليق رابط مختلف.</div>`;
+                    return;
+                }
+
+                const currentUrl = apiEndpoints[currentApiIndex];
+                currentApiIndex++;
+
+                container.innerHTML = `
+                    <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex flex-col items-center gap-3">
+                        <p class="text-xs text-emerald-400">جاري الاتصال بأفضل سيرفر بث متاح (API ${currentApiIndex})...</p>
+                        <div class="aspect-video w-full rounded-xl overflow-hidden shadow-lg bg-black">
+                            <iframe class="w-full h-full" src="${currentUrl}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen onerror="tryNextApi()"></iframe>
+                        </div>
                     </div>
-                </div>
-            `;
+                `;
+            }
+
+            tryNextApi();
             input.value = '';
         }
 
