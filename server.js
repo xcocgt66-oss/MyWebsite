@@ -147,7 +147,7 @@ app.all('/api/youtube/play', handleYoutubeRequest);
 app.all('/api/video', handleYoutubeRequest);
 app.all('/api/media', handleYoutubeRequest);
 
-// البروكسي الخاص بتخطي حماية يوتيوب مع حماية ضد خطأ 500 وتحويل تلقائي للرابط المباشر
+// البروكسي الحقيقي لبث الفيديو أجزاءً بأجزاء (Real-time Chunked Streaming) دون تحويل
 app.get('/api/stream', async (req, res) => {
     let streamUrl = req.query.url;
     
@@ -155,38 +155,37 @@ app.get('/api/stream', async (req, res) => {
     if (!streamUrl || typeof streamUrl !== 'string') return res.status(400).send('No video URL provided');
 
     try {
-        const range = req.headers.range;
+        const range = req.headers.range || 'bytes=0-';
         const headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Accept': '*/*',
-            'Accept-Encoding': 'identity;q=1, *;q=0',
-            'Connection': 'keep-alive',
+            'Range': range,
+            'Accept': 'video/webm,video/ogg,video/mp4,audio/webm,audio/ogg,audio/wav,*/*;q=0.9',
+            'Accept-Encoding': 'identity',
             'Referer': 'https://www.youtube.com/',
             'Origin': 'https://www.youtube.com/'
         };
-
-        if (range) {
-            headers['Range'] = range;
-        }
 
         const response = await axios({
             method: 'GET',
             url: streamUrl,
             responseType: 'stream',
             headers: headers,
-            timeout: 20000,
-            validateStatus: status => status >= 200 && status < 400
+            timeout: 30000,
+            validateStatus: status => status >= 200 && status < 300
         });
 
-        const headersToForward = ['content-type', 'content-length', 'accept-ranges', 'content-range', 'transfer-encoding'];
+        // تمرير كافة رؤوس البيانات الأساسية ليفهم المتصفح أن الملف يدعم الـ Seeking والـ Chunking
+        const headersToForward = ['content-type', 'content-length', 'accept-ranges', 'content-range', 'connection'];
         headersToForward.forEach(h => {
             if (response.headers[h]) {
                 res.setHeader(h, response.headers[h]);
             }
         });
         
+        // إجبار المتصفح على التعرف على المحتوى كـ Partial Content في حالة الـ Range
         res.status(response.status);
 
+        // ضخ الداتا (Stream) مباشرة للمتصفح أولاً بأول (Real-time chunks)
         response.data.pipe(res);
 
         response.data.on('error', (err) => {
@@ -201,9 +200,9 @@ app.get('/api/stream', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('[Stream Proxy Error 500]:', error.message);
+        console.error('[Stream Proxy Error]:', error.message);
         if (!res.headersSent) {
-            return res.redirect(302, streamUrl);
+            res.status(500).send('Streaming error from server');
         }
     }
 });
@@ -236,7 +235,7 @@ io.on('connection', (socket) => {
 });
 
 app.all('/api/*', (req, res) => {
-    res.status(404).json({ error: `API endpoint not found: ${req.originalUrl}` });
+    res.status(404).json({ error: `API endpoint not found: ` + req.originalUrl });
 });
 
 app.get('*', (req, res) => {
