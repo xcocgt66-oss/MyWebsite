@@ -2,7 +2,6 @@ const express = require('express');
 const axios = require('axios');
 const http = require('http');
 const { Server } = require('socket.io');
-const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
 
@@ -28,9 +27,6 @@ async function fetchWithFallback(apiList) {
     }
 }
 
-// ==========================================
-// 1. مسارات التيك توك
-// ==========================================
 const handleTikTokRequest = async (req, res) => {
     const url = req.body.url || req.query.url || req.body.link || req.query.link;
     if (!url) return res.status(400).json({ error: 'الرجاء توفير الرابط' });
@@ -53,9 +49,6 @@ app.all('/api/tiktok', handleTikTokRequest);
 app.all('/api/tiktok/play', handleTikTokRequest);
 app.all('/api/download', handleTikTokRequest);
 
-// ==========================================
-// 2. مسارات اليوتيوب والفيديو (تضمين كافة المفاتيح المحتملة للواجهة)
-// ==========================================
 const handleYoutubeRequest = async (req, res) => {
     const url = req.body.url || req.query.url;
     if (!url) return res.status(400).json({ error: 'الرجاء توفير رابط يوتيوب' });
@@ -77,20 +70,45 @@ const handleYoutubeRequest = async (req, res) => {
 
     try {
         const data = await fetchWithFallback(youtubeApis);
-        const mediaUrl = data.link || data.url || data.videos?.items?.[0]?.url || data.formats?.[0]?.url || data.audio?.[0]?.url || '';
-        
-        // نرسل جميع المفاتيح المحتملة لترضى الواجهة أياً كانت الطريقة التي تبرمجت بها
+        let mediaUrl = '';
+
+        if (data.formats && Array.isArray(data.formats) && data.formats.length > 0) {
+            const playableFormats = data.formats.filter(f => f.url && f.hasAudio !== false);
+            playableFormats.sort((a, b) => {
+                const heightA = a.height || parseInt(a.qualityLabel) || 0;
+                const heightB = b.height || parseInt(b.qualityLabel) || 0;
+                return heightB - heightA;
+            });
+            if (playableFormats.length > 0) {
+                mediaUrl = playableFormats[0].url;
+            }
+        }
+
+        if (!mediaUrl) {
+            if (data.videos?.items && data.videos.items.length > 0) {
+                const sortedItems = [...data.videos.items].sort((a, b) => (b.height || 0) - (a.height || 0));
+                mediaUrl = sortedItems[0].url;
+            } else if (typeof data.link === 'string') {
+                mediaUrl = data.link;
+            } else if (typeof data.url === 'string') {
+                mediaUrl = data.url;
+            }
+        }
+
+        if (!mediaUrl) {
+            return res.json({ success: false, error: 'لم نجد رابط بجودة عالية لهذا الفيديو.' });
+        }
+
         res.json({
             success: true,
             url: mediaUrl,
             link: mediaUrl,
             stream_url: mediaUrl,
             file: mediaUrl,
-            title: data.title || 'YouTube Video',
-            data: data
+            title: data.title || 'YouTube Video'
         });
     } catch (error) {
-        res.status(500).json({ error: 'حدث خطأ أثناء جلب الفيديو.' });
+        res.status(500).json({ error: 'حدث خطأ أثناء الاتصال بالـ API.' });
     }
 };
 
@@ -99,9 +117,6 @@ app.all('/api/youtube/play', handleYoutubeRequest);
 app.all('/api/video', handleYoutubeRequest);
 app.all('/api/media', handleYoutubeRequest);
 
-// ==========================================
-// 3. مسارات كرة القدم
-// ==========================================
 app.all('/api/football/:endpoint', async (req, res) => {
     const { endpoint } = req.params;
     const query = req.method === 'POST' ? req.body : req.query;
@@ -119,12 +134,7 @@ app.all('/api/football/:endpoint', async (req, res) => {
     }
 });
 
-// ==========================================
-// 4. نظام الشات و Socket.io
-// ==========================================
 io.on('connection', (socket) => {
-    console.log(`User connected: ${socket.id}`);
-
     socket.on('send_message', (messageData) => {
         io.emit('receive_message', messageData);
     });
@@ -132,15 +142,8 @@ io.on('connection', (socket) => {
     socket.on('chat_message', (msg) => {
         io.emit('chat_message', msg);
     });
-
-    socket.on('disconnect', () => {
-        console.log(`User disconnected: ${socket.id}`);
-    });
 });
 
-// ==========================================
-// 5. الحماية والتوجيه
-// ==========================================
 app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API endpoint not found: ${req.originalUrl}` });
 });
