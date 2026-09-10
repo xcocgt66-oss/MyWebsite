@@ -14,7 +14,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const VIDKRAKEN_API_KEY = '4dca474a-7265-4838-9c77-02fb574e0f60';
 const RAPID_API_KEY = '515f7a3162mshb63efcc57b50884p106404jsn51481b32a788';
 
 async function fetchWithFallback(apiList) {
@@ -52,88 +51,56 @@ app.all('/api/download', handleTikTokRequest);
 
 const handleYoutubeRequest = async (req, res) => {
     const url = req.body.url || req.query.url;
+    const quality = req.body.quality || req.query.quality || '480';
+
     if (!url) return res.status(400).json({ error: 'الرجاء توفير رابط يوتيوب' });
 
-    // 1. المحاولة الرئيسية: استخدام VidKraken API (الجودة الافتراضية 720p)
+    // استخراج Video ID من الرابط
+    let videoId = url;
+    if (url.includes('v=')) {
+        videoId = url.split('v=')[1]?.split('&')[0];
+    } else if (url.includes('youtu.be/')) {
+        videoId = url.split('youtu.be/')[1]?.split('?')[0];
+    } else if (url.includes('shorts/')) {
+        videoId = url.split('shorts/')[1]?.split('?')[0];
+    }
+
+    // 1. استخدام API الرئيسي المحدد
     try {
-        console.log(`[VidKraken] Submitting download job for 720p...`);
-        const submitRes = await axios.post(
-            'https://vidkraken.com/api/v2/download',
+        console.log(`[YouTube API] Fetching video ID: ${videoId} with quality: ${quality}`);
+        const response = await axios.get(
+            `https://youtube-video-fast-downloader-24-7.p.rapidapi.com/download_audio/${videoId}`,
             {
-                url: url,
-                format: '720'
-            },
-            {
+                params: { quality: quality },
                 headers: {
-                    'Authorization': `Bearer ${VIDKRAKEN_API_KEY}`,
+                    'X-Rapidapi-Key': RAPID_API_KEY,
+                    'X-Rapidapi-Host': 'youtube-video-fast-downloader-24-7.p.rapidapi.com',
                     'Content-Type': 'application/json'
                 },
-                timeout: 10000
+                timeout: 15000
             }
         );
 
-        const jobId = submitRes.data?.jobId || submitRes.data?.id || submitRes.data?.data?.jobId;
-        const initialDownloadUrl = submitRes.data?.downloadUrl || submitRes.data?.data?.downloadUrl;
+        const data = response.data;
+        const mediaUrl = data.link || data.url || data.download_url || data.stream_url;
 
-        if (initialDownloadUrl) {
-            console.log(`[Success] Direct Stream ready via VidKraken: ${initialDownloadUrl}`);
+        if (mediaUrl) {
+            console.log(`[Success] Retrieved direct stream with requested quality (${quality}p)`);
             return res.json({
                 success: true,
-                url: initialDownloadUrl,
-                link: initialDownloadUrl,
-                stream_url: initialDownloadUrl,
-                file: initialDownloadUrl,
-                title: submitRes.data?.title || 'YouTube Video (720p)'
+                url: mediaUrl,
+                link: mediaUrl,
+                stream_url: mediaUrl,
+                file: mediaUrl,
+                title: data.title || `YouTube Video (${quality}p)`
             });
         }
-
-        if (jobId) {
-            console.log(`[VidKraken] Job created (ID: ${jobId}), polling for status...`);
-            let attempts = 0;
-            const maxAttempts = 15; // فحص حتى 30 ثانية كحد أقصى
-
-            while (attempts < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                attempts++;
-
-                const statusRes = await axios.get(
-                    `https://vidkraken.com/api/v2/download/${jobId}`,
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${VIDKRAKEN_API_KEY}`
-                        },
-                        timeout: 5000
-                    }
-                );
-
-                const jobData = statusRes.data?.data || statusRes.data;
-                const status = jobData?.status;
-                const downloadUrl = jobData?.downloadUrl || jobData?.url;
-
-                if (downloadUrl) {
-                    console.log(`[Success] VidKraken completed 720p stream: ${downloadUrl}`);
-                    return res.json({
-                        success: true,
-                        url: downloadUrl,
-                        link: downloadUrl,
-                        stream_url: downloadUrl,
-                        file: downloadUrl,
-                        title: jobData?.title || 'YouTube Video (720p)'
-                    });
-                }
-
-                if (status === 'failed' || status === 'error') {
-                    console.error('[VidKraken] Job failed on server');
-                    break;
-                }
-            }
-        }
     } catch (err) {
-        console.error('[Error] VidKraken API failed:', err.response?.data || err.message);
+        console.error('[Error] Main Fast Downloader API failed:', err.message);
     }
 
-    // 2. المحاولة الاحتياطية: RapidAPI في حال تعثر VidKraken
-    console.log('[Info] Falling back to RapidAPI...');
+    // 2. المحاولة الاحتياطية في حال تعثر الـ API الرئيسي
+    console.log('[Info] Falling back to secondary RapidAPI endpoints...');
     const youtubeApis = [
         {
             method: 'GET',
@@ -145,66 +112,33 @@ const handleYoutubeRequest = async (req, res) => {
             method: 'GET',
             url: 'https://yt-api.p.rapidapi.com/dl',
             headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'yt-api.p.rapidapi.com' },
-            params: { id: url.includes('shorts/') ? url.split('shorts/')[1].split('?')[0] : url.split('v=')[1]?.split('&')[0] }
+            params: { id: videoId }
         }
     ];
 
-    const extractHeight = (format) => {
-        if (typeof format.height === 'number' && format.height > 0) return format.height;
-        const label = format.qualityLabel || format.quality || '';
-        const match = String(label).match(/\d+/);
-        if (match) return parseInt(match[0], 10);
-        if (label === 'hd1080') return 1080;
-        if (label === 'hd720') return 720;
-        if (label === 'medium') return 360;
-        if (label === 'small') return 240;
-        return 0;
-    };
-
     try {
         const data = await fetchWithFallback(youtubeApis);
-        let mediaUrl = '';
-        let allFormats = [];
+        let fallbackUrl = '';
 
-        if (Array.isArray(data.formats)) {
-            allFormats = allFormats.concat(data.formats);
-        }
-        if (Array.isArray(data.videos?.items)) {
-            allFormats = allFormats.concat(data.videos.items);
+        if (Array.isArray(data.formats) && data.formats.length > 0) {
+            const playable = data.formats.filter(f => f.url && f.hasAudio !== false);
+            if (playable.length > 0) fallbackUrl = playable[0].url;
         }
 
-        if (allFormats.length > 0) {
-            const playableFormats = allFormats.filter(f => {
-                const hasUrl = Boolean(f.url || f.link);
-                const hasAudio = f.hasAudio !== false && f.audioBitrate !== 0;
-                const hasVideo = f.hasVideo !== false;
-                return hasUrl && hasAudio && hasVideo;
-            });
-
-            playableFormats.sort((a, b) => extractHeight(b) - extractHeight(a));
-
-            if (playableFormats.length > 0) {
-                const bestFormat = playableFormats[0];
-                mediaUrl = bestFormat.url || bestFormat.link;
-                console.log(`[Fallback Success] Selected Resolution: ${extractHeight(bestFormat)}p`);
-            }
+        if (!fallbackUrl) {
+            fallbackUrl = data.link || data.url;
         }
 
-        if (!mediaUrl) {
-            if (typeof data.link === 'string') mediaUrl = data.link;
-            else if (typeof data.url === 'string') mediaUrl = data.url;
-        }
-
-        if (!mediaUrl) {
-            return res.json({ success: false, error: 'لم نجد رابط بجودة عالية لهذا الفيديو.' });
+        if (!fallbackUrl) {
+            return res.json({ success: false, error: 'لم نجد رابط لمشاهدة هذا الفيديو.' });
         }
 
         res.json({
             success: true,
-            url: mediaUrl,
-            link: mediaUrl,
-            stream_url: mediaUrl,
-            file: mediaUrl,
+            url: fallbackUrl,
+            link: fallbackUrl,
+            stream_url: fallbackUrl,
+            file: fallbackUrl,
             title: data.title || 'YouTube Video'
         });
     } catch (error) {
