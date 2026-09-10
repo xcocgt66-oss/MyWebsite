@@ -1,7 +1,6 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const axios = require('axios');
 const path = require('path');
 
 const app = express();
@@ -11,9 +10,6 @@ const io = new Server(server);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const RAPID_API_KEY = '515f7a3162mshb63efcc57b50884p106404jsn51481b32a788';
-
-// حفظ الشات لمدة 24 ساعة
 let chatHistory = [];
 const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
 
@@ -22,60 +18,6 @@ setInterval(() => {
     chatHistory = chatHistory.filter(msg => now - msg.timestamp < TWENTY_FOUR_HOURS);
 }, 60 * 60 * 1000);
 
-// TikTok API
-app.get('/api/tiktok/search', async (req, res) => {
-    const query = req.query.q || 'cat';
-    try {
-        const response = await axios.get(`https://toptik.p.rapidapi.com/search/videos`, {
-            params: { query: query, count: 15 },
-            headers: {
-                'X-RapidAPI-Key': RAPID_API_KEY,
-                'X-RapidAPI-Host': 'toptik.p.rapidapi.com'
-            }
-        });
-        res.json(response.data);
-    } catch (error) {
-        res.status(500).json({ error: 'فشل البحث في تيك توك' });
-    }
-});
-
-app.get('/api/tiktok/explore', async (req, res) => {
-    try {
-        const response = await axios.get(`https://toptik.p.rapidapi.com/feed/explore`, {
-            headers: {
-                'X-RapidAPI-Key': RAPID_API_KEY,
-                'X-RapidAPI-Host': 'toptik.p.rapidapi.com'
-            }
-        });
-        res.json(response.data);
-    } catch (error) {
-        res.status(500).json({ error: 'فشل جلب اكسبلور تيك توك' });
-    }
-});
-
-// Matches API (معالجة ذكية لجلب المباريات الحية واليومية وضمان عدم ظهورها فارغة)
-app.get('/api/matches', async (req, res) => {
-    try {
-        const response = await axios.get('https://free-api-live-football-data.p.rapidapi.com/schedules-livescores', {
-            headers: {
-                'X-RapidAPI-Key': RAPID_API_KEY,
-                'X-RapidAPI-Host': 'free-api-live-football-data.p.rapidapi.com'
-            }
-        });
-        res.json(response.data);
-    } catch (error) {
-        // في حال تعطل الـ API المؤقت، نرجع هيكلة مباريات حية حقيقية لضمان عمل الواجهة والشاشات دائماً
-        res.json({
-            matches: [
-                { id: 101, homeTeam: 'الهلال', awayTeam: 'النصر', status: 'LIVE', time: 'الدقيقة 65', league: 'دوري روشن السعودي', isLive: true, streamUrl: 'https://www.youtube.com/embed/live_stream?channel=EXAMPLE' },
-                { id: 102, homeTeam: 'ريال مدريد', awayTeam: 'برشلونة', status: 'UPCOMING', time: 'اليوم - 22:00', league: 'الدوري الإسباني', isLive: false },
-                { id: 103, homeTeam: 'مانشستر سيتي', awayTeam: 'ليفربول', status: 'FINISHED', time: 'انتهت (2 - 1)', league: 'الدوري الإنجليزي الممتاز', isLive: false }
-            ]
-        });
-    }
-});
-
-// Socket.io & Chat
 let onlineUsersCount = 0;
 
 io.on('connection', (socket) => {
