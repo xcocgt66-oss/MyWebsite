@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title></title>
+    <title>Direct API Server</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -136,26 +136,11 @@
 
                 const data = await response.json();
 
-                if (data.success && data.url) {
-                    const proxyUrl = `/api/stream?url=${encodeURIComponent(data.url)}`;
-                    
-                    container.innerHTML = `
-                        <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex flex-col items-center gap-3 max-w-3xl w-full shadow-2xl">
-                            <div class="w-full flex justify-between items-center px-2">
-                                <h3 class="text-white font-bold text-sm truncate pr-4">${data.title}</h3>
-                                <span class="text-xs text-emerald-400 whitespace-nowrap"><i class="fa-solid fa-server"></i> بث عبر السيرفر (${quality}p)</span>
-                            </div>
-                            <div class="aspect-video w-full rounded-xl overflow-hidden bg-black border border-slate-800 relative">
-                                <video id="native-video-player" controls autoplay playsinline referrerpolicy="no-referrer" class="w-full h-full outline-none object-contain">
-                                    <source src="${proxyUrl}" type="video/mp4">
-                                    متصفحك لا يدعم مشغل الفيديو المدمج.
-                                </video>
-                                <div id="video-error-overlay" class="hidden absolute inset-0 bg-black/80 flex items-center justify-center text-center text-rose-400 text-sm p-4"></div>
-                            </div>
-                        </div>
-                    `;
+                const rawSources = (data.sources && data.sources.length ? data.sources : (data.url ? [data.url] : []));
 
-                    setupVideoDiagnostics();
+                if (data.success && rawSources.length > 0) {
+                    const proxiedSources = rawSources.map(u => `/api/stream?url=${encodeURIComponent(u)}`);
+                    renderPlayer(data.title || 'YouTube Video', proxiedSources, quality);
                 } else {
                     container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-rose-500 max-w-3xl w-full">فشل في استخراج الرابط المباشر. تأكد من صحة الرابط أو حالة الـ API.</div>`;
                 }
@@ -166,10 +151,41 @@
             input.value = '';
         }
 
+        // حالة المصادر الحالية للفيديو المشغّل، تُستخدم للتبديل التلقائي عند الفشل
+        let currentSources = [];
+        let currentSourceIndex = 0;
+
+        function renderPlayer(title, sources, quality) {
+            currentSources = sources;
+            currentSourceIndex = 0;
+
+            const container = document.getElementById('media-feed');
+            container.innerHTML = `
+                <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex flex-col items-center gap-3 max-w-3xl w-full shadow-2xl">
+                    <div class="w-full flex justify-between items-center px-2">
+                        <h3 class="text-white font-bold text-sm truncate pr-4">${title}</h3>
+                        <span id="stream-source-badge" class="text-xs text-emerald-400 whitespace-nowrap"><i class="fa-solid fa-server"></i> بث عبر السيرفر (${quality}p)</span>
+                    </div>
+                    <div class="aspect-video w-full rounded-xl overflow-hidden bg-black border border-slate-800 relative">
+                        <video id="native-video-player" controls autoplay playsinline referrerpolicy="no-referrer" class="w-full h-full outline-none object-contain">
+                            <source id="native-video-source" src="${sources[0]}" type="video/mp4">
+                            متصفحك لا يدعم مشغل الفيديو المدمج.
+                        </video>
+                        <div id="video-error-overlay" class="hidden absolute inset-0 bg-black/80 flex items-center justify-center text-center text-rose-400 text-sm p-4"></div>
+                    </div>
+                </div>
+            `;
+
+            setupVideoDiagnostics();
+        }
+
         function setupVideoDiagnostics() {
             const video = document.getElementById('native-video-player');
             const overlay = document.getElementById('video-error-overlay');
+            const badge = document.getElementById('stream-source-badge');
             if (!video || !overlay) return;
+
+            let progressTimer = null;
 
             const showOverlay = (message) => {
                 overlay.innerText = message;
@@ -177,34 +193,58 @@
             };
             const hideOverlay = () => overlay.classList.add('hidden');
 
-            // إذا لم تصل أي بيانات فعلية خلال 20 ثانية من الضغط تشغيل، اعتبرها معلّقة
-            let progressTimer = setTimeout(() => {
-                if (video.readyState < 2) {
-                    showOverlay('البث لا يستجيب (قد يكون الرابط منتهي الصلاحية أو مخنوقاً من يوتيوب). جرّب رابطاً آخر أو أعد المحاولة.');
+            const updateBadge = () => {
+                if (badge && currentSources.length > 1) {
+                    badge.innerHTML = `<i class="fa-solid fa-server"></i> بث عبر السيرفر - مصدر ${currentSourceIndex + 1}/${currentSources.length}`;
                 }
-            }, 20000);
+            };
+
+            const armProgressTimer = () => {
+                clearTimeout(progressTimer);
+                // إذا لم تصل أي بيانات فعلية خلال 20 ثانية، اعتبرها معلّقة وانتقل للمصدر التالي
+                progressTimer = setTimeout(() => {
+                    if (video.readyState < 2) tryNextSource('لا يستجيب المصدر');
+                }, 20000);
+            };
+
+            const tryNextSource = (reason) => {
+                clearTimeout(progressTimer);
+                if (currentSourceIndex < currentSources.length - 1) {
+                    currentSourceIndex++;
+                    updateBadge();
+                    showOverlay(`فشل المصدر السابق (${reason})، جاري تجربة مصدر بديل (${currentSourceIndex + 1}/${currentSources.length})...`);
+                    video.src = currentSources[currentSourceIndex];
+                    video.load();
+                    video.play().catch(() => {});
+                    armProgressTimer();
+                } else {
+                    showOverlay('كل المصادر المتاحة فشلت في التشغيل. قد يكون الفيديو محظوراً أو الروابط منتهية الصلاحية. جرّب رابطاً آخر.');
+                }
+            };
+
+            updateBadge();
+            armProgressTimer();
 
             video.addEventListener('loadeddata', () => {
                 clearTimeout(progressTimer);
                 hideOverlay();
             });
 
-            video.addEventListener('error', () => {
+            video.addEventListener('playing', () => {
                 clearTimeout(progressTimer);
+                hideOverlay();
+            });
+
+            video.addEventListener('error', () => {
                 const err = video.error;
-                let msg = 'تعذر تشغيل الفيديو.';
-                if (err) {
-                    const codes = {1: 'تم إلغاء التحميل', 2: 'خطأ في الشبكة أثناء التحميل', 3: 'تعذر فك ترميز الفيديو', 4: 'مصدر الفيديو غير مدعوم أو فشل السيرفر في جلبه'};
-                    msg = codes[err.code] ? `تعذر تشغيل الفيديو: ${codes[err.code]}` : msg;
-                }
-                showOverlay(msg);
+                const codes = {1: 'تم إلغاء التحميل', 2: 'خطأ في الشبكة', 3: 'تعذر فك الترميز', 4: 'مصدر غير مدعوم'};
+                const reason = (err && codes[err.code]) || 'خطأ غير معروف';
+                tryNextSource(reason);
             });
 
             video.addEventListener('stalled', () => {
                 showOverlay('توقف البث مؤقتاً... قد يكون يوتيوب يخنق سرعة الرابط.');
             });
-
-            video.addEventListener('playing', hideOverlay);
         }
 
         socket.on('chat_message', (data) => {
