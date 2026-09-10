@@ -15,6 +15,8 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// خدمة ملفات الواجهة من مجلد public أولاً
 app.use(express.static(path.join(__dirname, 'public')));
 
 const RAPID_API_KEY = '515f7a3162mshb63efcc57b50884p106404jsn51481b32a788';
@@ -32,7 +34,7 @@ async function fetchWithFallback(apiList) {
 }
 
 // ==========================================
-// 1. مسارات التيك توك (جميع الاحتمالات الممكنة)
+// 1. مسارات التيك توك (شاملة لكل الاحتمالات)
 // ==========================================
 const handleTikTokRequest = async (req, res) => {
     const url = req.body.url || req.query.url || req.body.link || req.query.link;
@@ -79,6 +81,7 @@ const handleYoutubeRequest = async (req, res) => {
 
 app.all('/api/youtube', handleYoutubeRequest);
 app.all('/api/video', handleYoutubeRequest);
+app.all('/api/media', handleYoutubeRequest);
 
 // ==========================================
 // 3. مسارات كرة القدم
@@ -110,7 +113,6 @@ io.on('connection', (socket) => {
         io.emit('receive_message', messageData);
     });
 
-    // احداث بديلة للشات لو الواجهة تستخدم أسماء ثانية
     socket.on('chat_message', (msg) => {
         io.emit('chat_message', msg);
     });
@@ -121,8 +123,13 @@ io.on('connection', (socket) => {
 });
 
 // ==========================================
-// 5. توجيه واجهة الموقع (Frontend)
+// 5. حماية صارمة: منع أي مسار API مفقود من إرجاع HTML
 // ==========================================
+app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: `API endpoint not found: ${req.originalUrl}` });
+});
+
+// توجيه باقي طلبات الويب العادية لملف الواجهة
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
