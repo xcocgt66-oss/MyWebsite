@@ -54,8 +54,17 @@
         <main class="flex-1 p-8 overflow-y-auto">
             <div id="tab-youtube" class="tab-content">
                 <h2 class="text-2xl font-bold mb-6 text-white text-center">المشغل المباشر (Direct API Server)</h2>
-                <div class="mb-6 flex gap-2 max-w-3xl mx-auto">
+                <div class="mb-6 flex flex-col sm:flex-row gap-2 max-w-3xl mx-auto">
                     <input type="text" id="yt-link-input" placeholder="أدخل رابط الميديا (يوتيوب وغيرها)..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500">
+                    
+                    <!-- قائمة اختيار الجودة، الخيار الافتراضي هو 480p -->
+                    <select id="yt-quality-select" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 cursor-pointer text-sm font-medium">
+                        <option value="360">360p</option>
+                        <option value="480" selected>480p (افتراضي)</option>
+                        <option value="720">720p (HD)</option>
+                        <option value="1080">1080p (FHD)</option>
+                    </select>
+
                     <button onclick="fetchAndPlayMedia()" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-white font-medium">سحب وتشغيل</button>
                 </div>
                 <div id="media-feed" class="w-full flex justify-center">
@@ -147,11 +156,14 @@
 
         async function fetchAndPlayMedia() {
             const input = document.getElementById('yt-link-input');
+            const qualitySelect = document.getElementById('yt-quality-select');
+            
             const url = input.value.trim();
+            const quality = qualitySelect.value;
             if(!url) return;
 
             const container = document.getElementById('media-feed');
-            container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-indigo-400 max-w-3xl w-full"><i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i><br>جاري الاتصال بالسيرفر وسحب الرابط المباشر بأعلى جودة...</div>`;
+            container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-indigo-400 max-w-3xl w-full"><i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i><br>جاري الاتصال بالسيرفر وسحب الرابط المباشر بجودة (${quality}p)...</div>`;
 
             try {
                 const response = await fetch('/api/youtube', {
@@ -159,7 +171,7 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ url: url })
+                    body: JSON.stringify({ url: url, quality: quality })
                 });
 
                 const data = await response.json();
@@ -169,7 +181,7 @@
                         <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex flex-col items-center gap-3 max-w-3xl w-full shadow-2xl">
                             <div class="w-full flex justify-between items-center px-2">
                                 <h3 class="text-white font-bold text-sm truncate pr-4">${data.title}</h3>
-                                <span class="text-xs text-emerald-400 whitespace-nowrap"><i class="fa-solid fa-link"></i> اتصال مباشر (HD)</span>
+                                <span class="text-xs text-emerald-400 whitespace-nowrap"><i class="fa-solid fa-link"></i> اتصال مباشر (${quality}p)</span>
                             </div>
                             <div class="aspect-video w-full rounded-xl overflow-hidden bg-black border border-slate-800">
                                 <video id="native-video-player" controls autoplay class="w-full h-full outline-none object-contain">
