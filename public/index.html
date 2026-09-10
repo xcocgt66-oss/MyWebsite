@@ -145,14 +145,17 @@
                                 <h3 class="text-white font-bold text-sm truncate pr-4">${data.title}</h3>
                                 <span class="text-xs text-emerald-400 whitespace-nowrap"><i class="fa-solid fa-server"></i> بث عبر السيرفر (${quality}p)</span>
                             </div>
-                            <div class="aspect-video w-full rounded-xl overflow-hidden bg-black border border-slate-800">
-                                <video id="native-video-player" controls autoplay playsinline referrerpolicy="no-referrer" crossorigin="anonymous" class="w-full h-full outline-none object-contain">
+                            <div class="aspect-video w-full rounded-xl overflow-hidden bg-black border border-slate-800 relative">
+                                <video id="native-video-player" controls autoplay playsinline referrerpolicy="no-referrer" class="w-full h-full outline-none object-contain">
                                     <source src="${proxyUrl}" type="video/mp4">
                                     متصفحك لا يدعم مشغل الفيديو المدمج.
                                 </video>
+                                <div id="video-error-overlay" class="hidden absolute inset-0 bg-black/80 flex items-center justify-center text-center text-rose-400 text-sm p-4"></div>
                             </div>
                         </div>
                     `;
+
+                    setupVideoDiagnostics();
                 } else {
                     container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-rose-500 max-w-3xl w-full">فشل في استخراج الرابط المباشر. تأكد من صحة الرابط أو حالة الـ API.</div>`;
                 }
@@ -163,6 +166,47 @@
             input.value = '';
         }
 
+        function setupVideoDiagnostics() {
+            const video = document.getElementById('native-video-player');
+            const overlay = document.getElementById('video-error-overlay');
+            if (!video || !overlay) return;
+
+            const showOverlay = (message) => {
+                overlay.innerText = message;
+                overlay.classList.remove('hidden');
+            };
+            const hideOverlay = () => overlay.classList.add('hidden');
+
+            // إذا لم تصل أي بيانات فعلية خلال 20 ثانية من الضغط تشغيل، اعتبرها معلّقة
+            let progressTimer = setTimeout(() => {
+                if (video.readyState < 2) {
+                    showOverlay('البث لا يستجيب (قد يكون الرابط منتهي الصلاحية أو مخنوقاً من يوتيوب). جرّب رابطاً آخر أو أعد المحاولة.');
+                }
+            }, 20000);
+
+            video.addEventListener('loadeddata', () => {
+                clearTimeout(progressTimer);
+                hideOverlay();
+            });
+
+            video.addEventListener('error', () => {
+                clearTimeout(progressTimer);
+                const err = video.error;
+                let msg = 'تعذر تشغيل الفيديو.';
+                if (err) {
+                    const codes = {1: 'تم إلغاء التحميل', 2: 'خطأ في الشبكة أثناء التحميل', 3: 'تعذر فك ترميز الفيديو', 4: 'مصدر الفيديو غير مدعوم أو فشل السيرفر في جلبه'};
+                    msg = codes[err.code] ? `تعذر تشغيل الفيديو: ${codes[err.code]}` : msg;
+                }
+                showOverlay(msg);
+            });
+
+            video.addEventListener('stalled', () => {
+                showOverlay('توقف البث مؤقتاً... قد يكون يوتيوب يخنق سرعة الرابط.');
+            });
+
+            video.addEventListener('playing', hideOverlay);
+        }
+
         socket.on('chat_message', (data) => {
             appendMessage(data.user, data.text);
         });
@@ -171,27 +215,6 @@
             const input = document.getElementById('chat-input');
             const text = input.value.trim();
             if (!text) return;
-            
-            socket.emit('chat_message', { user: username, text: text });
-            input.value = '';
-        }
-
-        function handleChatKeyPress(e) {
-            if (e.key === 'Enter') sendChatMessage();
-        }
-
-        function appendMessage(user, text) {
-            const container = document.getElementById('chat-messages');
-            const div = document.createElement('div');
-            div.className = "bg-slate-900 p-3 rounded-xl border border-slate-800/60 break-words";
-            div.innerHTML = `<span class="text-indigo-400 font-bold text-sm ml-2">${user}:</span><span class="text-slate-200 text-sm">${text}</span>`;
-            container.appendChild(div);
-            container.scrollTop = container.scrollHeight;
-        }
-    </script>
-</body>
-</html>
-xt) return;
             
             socket.emit('chat_message', { user: username, text: text });
             input.value = '';
