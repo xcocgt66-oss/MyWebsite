@@ -4,24 +4,19 @@ const http = require('http');
 const { Server } = require('socket.io');
 const fs = require('fs');
 const path = require('path');
-const ytdl = require('@distube/ytdl-core');
 const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-// إعدادات البادي والاتصال
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// خدمة ملفات الواجهة من مجلد public أولاً
 app.use(express.static(path.join(__dirname, 'public')));
 
 const RAPID_API_KEY = '515f7a3162mshb63efcc57b50884p106404jsn51481b32a788';
 
-// نظام التبديل التلقائي للـ APIs
 async function fetchWithFallback(apiList) {
     for (let i = 0; i < apiList.length; i++) {
         try {
@@ -34,7 +29,7 @@ async function fetchWithFallback(apiList) {
 }
 
 // ==========================================
-// 1. مسارات التيك توك (شاملة لكل الاحتمالات)
+// 1. مسارات التيك توك
 // ==========================================
 const handleTikTokRequest = async (req, res) => {
     const url = req.body.url || req.query.url || req.body.link || req.query.link;
@@ -42,8 +37,7 @@ const handleTikTokRequest = async (req, res) => {
 
     const tiktokApis = [
         { method: 'GET', url: `https://tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com/rich_response/index`, headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com' }, params: { url } },
-        { method: 'GET', url: `https://tiktok-full-info-without-watermark.p.rapidapi.com/index`, headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'tiktok-full-info-without-watermark.p.rapidapi.com' }, params: { url } },
-        { method: 'GET', url: `https://tiktok-downloader-simple.p.rapidapi.com/tiksnapsave/`, headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'tiktok-downloader-simple.p.rapidapi.com' }, params: { link: url } }
+        { method: 'GET', url: `https://tiktok-full-info-without-watermark.p.rapidapi.com/index`, headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'tiktok-full-info-without-watermark.p.rapidapi.com' }, params: { url } }
     ];
 
     try {
@@ -60,28 +54,42 @@ app.all('/api/tiktok/play', handleTikTokRequest);
 app.all('/api/download', handleTikTokRequest);
 
 // ==========================================
-// 2. مسارات اليوتيوب والفيديو (مطابقة تامة لواجهتك)
+// 2. مسارات اليوتيوب والفيديو (عبر RapidAPI السريع والمضمون)
 // ==========================================
 const handleYoutubeRequest = async (req, res) => {
     const url = req.body.url || req.query.url;
     if (!url) return res.status(400).json({ error: 'الرجاء توفير رابط يوتيوب' });
 
-    try {
-        const info = await ytdl.getInfo(url);
-        const format = ytdl.chooseFormat(info.formats, { quality: 'highest', filter: 'audioandvideo' });
-        
-        if (format && format.url) {
-            res.json({ success: true, stream_url: format.url, title: info.videoDetails.title, url: format.url });
-        } else {
-            res.status(404).json({ error: 'لم يتم العثور على صيغة مناسبة.' });
+    const youtubeApis = [
+        {
+            method: 'GET',
+            url: 'https://youtube-media-downloader.p.rapidapi.com/v2/video/details',
+            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'youtube-media-downloader.p.rapidapi.com' },
+            params: { url: url }
+        },
+        {
+            method: 'GET',
+            url: 'https://yt-api.p.rapidapi.com/dl',
+            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'yt-api.p.rapidapi.com' },
+            params: { id: url.includes('shorts/') ? url.split('shorts/')[1].split('?')[0] : url.split('v=')[1]?.split('&')[0] }
         }
+    ];
+
+    try {
+        const data = await fetchWithFallback(youtubeApis);
+        // تنسيق الرد بما تتوقعه واجهتك الأمامية
+        res.json({
+            success: true,
+            stream_url: data.link || data.url || data.videos?.items?.[0]?.url || data.formats?.[0]?.url,
+            title: data.title || 'YouTube Video'
+        });
     } catch (error) {
         res.status(500).json({ error: 'حدث خطأ أثناء جلب الفيديو.' });
     }
 };
 
 app.all('/api/youtube', handleYoutubeRequest);
-app.all('/api/youtube/play', handleYoutubeRequest); // المسار الجديد اللي ظهر في صورتك
+app.all('/api/youtube/play', handleYoutubeRequest);
 app.all('/api/video', handleYoutubeRequest);
 app.all('/api/media', handleYoutubeRequest);
 
@@ -125,13 +133,12 @@ io.on('connection', (socket) => {
 });
 
 // ==========================================
-// 5. حماية مسارات الـ API
+// 5. الحماية والتوجيه
 // ==========================================
 app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API endpoint not found: ${req.originalUrl}` });
 });
 
-// توجيه باقي طلبات الويب العادية لملف الواجهة
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
