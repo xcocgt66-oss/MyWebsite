@@ -67,7 +67,7 @@ const handleYoutubeRequest = async (req, res) => {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             },
-            timeout: 12000
+            timeout: 120000
         });
 
         const cobaltData = cobaltResponse.data;
@@ -103,7 +103,7 @@ const handleYoutubeRequest = async (req, res) => {
                     'X-Rapidapi-Key': RAPID_API_KEY,
                     'X-Rapidapi-Host': 'youtube-video-fast-downloader-24-7.p.rapidapi.com'
                 },
-                timeout: 10000
+                timeout: 100000
             }
         );
 
