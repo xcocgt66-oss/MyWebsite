@@ -51,80 +51,100 @@ app.all('/api/download', handleTikTokRequest);
 
 const handleYoutubeRequest = async (req, res) => {
     const url = req.body.url || req.query.url;
-    const quality = req.body.quality || req.query.quality || '720';
+    const quality = req.body.quality || req.query.quality || '480';
 
     if (!url) return res.status(400).json({ error: 'الرجاء توفير رابط يوتيوب' });
 
-    // 1. المحاولة الأولى باستخدام Cobalt API (يدعم 720p / 1080p مدمجة بالصوت بدون تقييد 360p)
-    try {
-        console.log(`[Cobalt Engine] Requesting Quality: ${quality}p for URL: ${url}`);
-        const cobaltResponse = await axios.post('https://api.cobalt.tools/', {
-            url: url,
-            videoQuality: quality,
-            downloadMode: 'auto'
-        }, {
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            },
-            timeout: 120000
-        });
-
-        const cobaltData = cobaltResponse.data;
-        const mediaUrl = cobaltData?.url || cobaltData?.picker?.[0]?.url;
-
-        if (mediaUrl) {
-            console.log(`[Cobalt Success] Got high quality stream URL (${quality}p)`);
-            return res.json({
-                success: true,
-                url: mediaUrl,
-                link: mediaUrl,
-                stream_url: mediaUrl,
-                file: mediaUrl,
-                title: `YouTube Video (${quality}p)`
-            });
-        }
-    } catch (err) {
-        console.error('[Cobalt Error] Primary API failed, trying RapidAPI fallback...', err.message);
+    // استخراج Video ID من الرابط
+    let videoId = url;
+    if (url.includes('v=')) {
+        videoId = url.split('v=')[1]?.split('&')[0];
+    } else if (url.includes('youtu.be/')) {
+        videoId = url.split('youtu.be/')[1]?.split('?')[0];
+    } else if (url.includes('shorts/')) {
+        videoId = url.split('shorts/')[1]?.split('?')[0];
     }
 
-    // 2. المحاولة الثانية عبر RapidAPI Fast Downloader (بديل احتياطي)
-    let videoId = url;
-    if (url.includes('v=')) videoId = url.split('v=')[1]?.split('&')[0];
-    else if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1]?.split('?')[0];
-    else if (url.includes('shorts/')) videoId = url.split('shorts/')[1]?.split('?')[0];
-
+    // 1. استخدام API الرئيسي المحدد
     try {
+        console.log(`[YouTube API] Fetching video ID: ${videoId} with quality: ${quality}`);
         const response = await axios.get(
             `https://youtube-video-fast-downloader-24-7.p.rapidapi.com/download_audio/${videoId}`,
             {
                 params: { quality: quality },
                 headers: {
                     'X-Rapidapi-Key': RAPID_API_KEY,
-                    'X-Rapidapi-Host': 'youtube-video-fast-downloader-24-7.p.rapidapi.com'
+                    'X-Rapidapi-Host': 'youtube-video-fast-downloader-24-7.p.rapidapi.com',
+                    'Content-Type': 'application/json'
                 },
-                timeout: 100000
+                timeout: 15000
             }
         );
 
         const data = response.data;
-        const fallbackUrl = data.link || data.url || data.download_url;
+        const mediaUrl = data.link || data.url || data.download_url || data.stream_url;
 
-        if (fallbackUrl) {
+        if (mediaUrl) {
+            console.log(`[Success] Retrieved direct stream with requested quality (${quality}p)`);
             return res.json({
                 success: true,
-                url: fallbackUrl,
-                link: fallbackUrl,
-                stream_url: fallbackUrl,
-                file: fallbackUrl,
+                url: mediaUrl,
+                link: mediaUrl,
+                stream_url: mediaUrl,
+                file: mediaUrl,
                 title: data.title || `YouTube Video (${quality}p)`
             });
         }
     } catch (err) {
-        console.error('[RapidAPI Error] Fallback failed:', err.message);
+        console.error('[Error] Main Fast Downloader API failed:', err.message);
     }
 
-    res.status(500).json({ success: false, error: 'تعذر جلب فيديو بالجودة المطلوبة حالياً.' });
+    // 2. المحاولة الاحتياطية في حال تعثر الـ API الرئيسي
+    console.log('[Info] Falling back to secondary RapidAPI endpoints...');
+    const youtubeApis = [
+        {
+            method: 'GET',
+            url: 'https://youtube-media-downloader.p.rapidapi.com/v2/video/details',
+            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'youtube-media-downloader.p.rapidapi.com' },
+            params: { url: url }
+        },
+        {
+            method: 'GET',
+            url: 'https://yt-api.p.rapidapi.com/dl',
+            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'yt-api.p.rapidapi.com' },
+            params: { id: videoId }
+        }
+    ];
+
+    try {
+        const data = await fetchWithFallback(youtubeApis);
+        let fallbackUrl = '';
+
+        if (Array.isArray(data.formats) && data.formats.length > 0) {
+            const playable = data.formats.filter(f => f.url && f.hasAudio !== false);
+            if (playable.length > 0) fallbackUrl = playable[0].url;
+        }
+
+        if (!fallbackUrl) {
+            fallbackUrl = data.link || data.url;
+        }
+
+        if (!fallbackUrl) {
+            return res.json({ success: false, error: 'لم نجد رابط لمشاهدة هذا الفيديو.' });
+        }
+
+        res.json({
+            success: true,
+            url: fallbackUrl,
+            link: fallbackUrl,
+            stream_url: fallbackUrl,
+            file: fallbackUrl,
+            title: data.title || 'YouTube Video'
+        });
+    } catch (error) {
+        console.error("Youtube API Error:", error.message);
+        res.status(500).json({ error: 'حدث خطأ أثناء الاتصال بالـ API.' });
+    }
 };
 
 app.all('/api/youtube', handleYoutubeRequest);
