@@ -5,19 +5,22 @@ const { Server } = require('socket.io');
 const fs = require('fs');
 const path = require('path');
 const ytdl = require('@distube/ytdl-core');
+const cors = require('cors'); // مهم جداً لمنع مشاكل الاتصال
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-// إعدادات البادي وخدمة ملفات المجلد العام public
+// إعدادات البادي للسماح بقراءة الـ JSON والـ Form Data
+app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const RAPID_API_KEY = '515f7a3162mshb63efcc57b50884p106404jsn51481b32a788';
 
 // ==========================================
-// 1. نظام التبديل التلقائي (Fallback Logic)
+// 1. نظام التبديل التلقائي للـ APIs
 // ==========================================
 async function fetchWithFallback(apiList) {
     for (let i = 0; i < apiList.length; i++) {
@@ -33,28 +36,15 @@ async function fetchWithFallback(apiList) {
 }
 
 // ==========================================
-// 2. Football APIs
+// 2. Football APIs (يدعم GET و POST)
 // ==========================================
-app.get('/api/football/:endpoint', async (req, res) => {
+app.all('/api/football/:endpoint', async (req, res) => {
     const { endpoint } = req.params;
-    const query = req.query;
+    const query = req.method === 'POST' ? req.body : req.query;
 
     const footballApis = [
-        {
-            method: 'GET',
-            url: `https://v3.football.api-sports.io/${endpoint}`,
-            headers: { 'x-apisports-key': 'a0094f3392b248423f5ffb12191f90c0' },
-            params: query
-        },
-        {
-            method: 'GET',
-            url: `https://free-api-live-football-data.p.rapidapi.com/${endpoint}`,
-            headers: {
-                'X-Rapidapi-Key': RAPID_API_KEY,
-                'X-Rapidapi-Host': 'free-api-live-football-data.p.rapidapi.com'
-            },
-            params: query
-        }
+        { method: 'GET', url: `https://v3.football.api-sports.io/${endpoint}`, headers: { 'x-apisports-key': 'a0094f3392b248423f5ffb12191f90c0' }, params: query },
+        { method: 'GET', url: `https://free-api-live-football-data.p.rapidapi.com/${endpoint}`, headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'free-api-live-football-data.p.rapidapi.com' }, params: query }
     ];
 
     try {
@@ -66,30 +56,15 @@ app.get('/api/football/:endpoint', async (req, res) => {
 });
 
 // ==========================================
-// 3. TikTok APIs
+// 3. TikTok APIs (يدعم GET و POST)
 // ==========================================
-app.get('/api/tiktok/info', async (req, res) => {
-    const { url } = req.query;
+app.all('/api/tiktok/info', async (req, res) => {
+    const url = req.body.url || req.query.url;
+    if (!url) return res.status(400).json({ error: 'الرجاء توفير رابط تيك توك' });
 
     const tiktokApis = [
-        {
-            method: 'GET',
-            url: `https://tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com/rich_response/index`,
-            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com' },
-            params: { url }
-        },
-        {
-            method: 'GET',
-            url: `https://tiktok-full-info-without-watermark.p.rapidapi.com/index`,
-            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'tiktok-full-info-without-watermark.p.rapidapi.com' },
-            params: { url }
-        },
-        {
-            method: 'GET',
-            url: `https://tiktok-downloader-simple.p.rapidapi.com/tiksnapsave/`,
-            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'tiktok-downloader-simple.p.rapidapi.com' },
-            params: { link: url }
-        }
+        { method: 'GET', url: `https://tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com/rich_response/index`, headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com' }, params: { url } },
+        { method: 'GET', url: `https://tiktok-full-info-without-watermark.p.rapidapi.com/index`, headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'tiktok-full-info-without-watermark.p.rapidapi.com' }, params: { url } }
     ];
 
     try {
@@ -101,75 +76,61 @@ app.get('/api/tiktok/info', async (req, res) => {
 });
 
 // ==========================================
-// 4. Live Streams APIs
+// 4. YouTube API (لجلب رابط الـ MP4 المباشر للتشغيل)
 // ==========================================
-app.get('/api/livestream', async (req, res) => {
-    const streamApis = [
-        {
-            method: 'GET',
-            url: `https://all-sport-live-stream.p.rapidapi.com/esid`,
-            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'all-sport-live-stream.p.rapidapi.com' }
-        }
-    ];
+app.all('/api/youtube', async (req, res) => {
+    const url = req.body.url || req.query.url;
+    if (!url) return res.status(400).json({ error: 'الرجاء توفير رابط يوتيوب' });
 
     try {
-        const data = await fetchWithFallback(streamApis);
-        res.json(data);
-    } catch (err) {
-        res.status(500).json({ error: 'Live Stream API is currently down' });
+        const info = await ytdl.getInfo(url);
+        // نختار أفضل جودة متوفرة بصيغة mp4 للتشغيل المباشر
+        const format = ytdl.chooseFormat(info.formats, { quality: 'highest', filter: 'audioandvideo' });
+        
+        if (format && format.url) {
+            res.json({ success: true, stream_url: format.url, title: info.videoDetails.title });
+        } else {
+            res.status(404).json({ error: 'لم يتم العثور على صيغة مناسبة للفيديو.' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: 'حدث خطأ أثناء جلب الفيديو من يوتيوب.' });
     }
 });
 
 // ==========================================
-// 5. YouTube: التحميل في السيرفر والحذف عند الخروج
+// 5. Chat & Socket.io Logic
 // ==========================================
-const DOWNLOAD_DIR = path.join(__dirname, 'downloads');
-if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR);
-
 io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
-    const userVideoPath = path.join(DOWNLOAD_DIR, `${socket.id}.mp4`);
 
-    socket.on('request_video', async (youtubeUrl) => {
-        try {
-            const videoStream = ytdl(youtubeUrl, { quality: 'lowest' });
-            const writeStream = fs.createWriteStream(userVideoPath);
-
-            videoStream.pipe(writeStream);
-
-            writeStream.on('finish', () => {
-                socket.emit('video_ready', `/stream/${socket.id}`);
-            });
-
-        } catch (error) {
-            socket.emit('video_error', 'حدث خطأ أثناء تحميل الفيديو.');
-        }
+    // نظام الشات (استلام رسالة وإعادة إرسالها للجميع)
+    socket.on('send_message', (messageData) => {
+        io.emit('receive_message', messageData);
     });
 
     socket.on('disconnect', () => {
         console.log(`User disconnected: ${socket.id}`);
-        if (fs.existsSync(userVideoPath)) {
-            fs.unlinkSync(userVideoPath);
-            console.log(`Video deleted for user: ${socket.id}`);
-        }
     });
 });
 
-app.get('/stream/:id', (req, res) => {
-    const videoPath = path.join(DOWNLOAD_DIR, `${req.params.id}.mp4`);
-    if (fs.existsSync(videoPath)) {
-        res.sendFile(videoPath);
-    } else {
-        res.status(404).send('Video not found or already deleted.');
-    }
+// ==========================================
+// 6. حماية مسارات الـ API من إرجاع HTML
+// (هذا هو الحل الجذري لمشكلة الصورة!)
+// ==========================================
+app.all('/api/*', (req, res) => {
+    res.status(404).json({ 
+        error: 'المسار المطلوب غير موجود في السيرفر. تأكد من الرابط أو طريقة الطلب (GET/POST).' 
+    });
 });
 
-// ضمان توجيه كافة المسارات غير المعرفة إلى index.html لعمل الواجهة
+// ==========================================
+// 7. توجيه باقي المسارات لملف الواجهة HTML
+// ==========================================
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });
