@@ -1,16 +1,18 @@
-const express = require('express'); //
-const axios = require('axios'); //
+const express = require('express');
+const axios = require('axios');
 const http = require('http');
-const { Server } = require('socket.io'); //[cite: 4]
+const { Server } = require('socket.io');
 const fs = require('fs');
 const path = require('path');
-const ytdl = require('@distube/ytdl-core'); //[cite: 4]
+const ytdl = require('@distube/ytdl-core');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } }); //[cite: 4]
+const io = new Server(server, { cors: { origin: '*' } });
 
-app.use(express.json()); //[cite: 4]
+// إعدادات البادي وخدمة ملفات المجلد العام public
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
 const RAPID_API_KEY = '515f7a3162mshb63efcc57b50884p106404jsn51481b32a788';
 
@@ -21,11 +23,10 @@ async function fetchWithFallback(apiList) {
     for (let i = 0; i < apiList.length; i++) {
         try {
             console.log(`Trying API ${i + 1}...`);
-            const response = await axios(apiList[i]); //[cite: 4]
-            return response.data; 
+            const response = await axios(apiList[i]);
+            return response.data;
         } catch (error) {
             console.error(`API ${i + 1} Failed: ${error.message}`);
-            // إذا كان هذا آخر API وفشل، قم برمي الخطأ
             if (i === apiList.length - 1) throw new Error('All APIs failed to respond.');
         }
     }
@@ -36,8 +37,8 @@ async function fetchWithFallback(apiList) {
 // ==========================================
 app.get('/api/football/:endpoint', async (req, res) => {
     const { endpoint } = req.params;
-    const query = req.query; 
-    
+    const query = req.query;
+
     const footballApis = [
         {
             method: 'GET',
@@ -48,9 +49,9 @@ app.get('/api/football/:endpoint', async (req, res) => {
         {
             method: 'GET',
             url: `https://free-api-live-football-data.p.rapidapi.com/${endpoint}`,
-            headers: { 
-                'X-Rapidapi-Key': RAPID_API_KEY, 
-                'X-Rapidapi-Host': 'free-api-live-football-data.p.rapidapi.com' 
+            headers: {
+                'X-Rapidapi-Key': RAPID_API_KEY,
+                'X-Rapidapi-Host': 'free-api-live-football-data.p.rapidapi.com'
             },
             params: query
         }
@@ -68,7 +69,7 @@ app.get('/api/football/:endpoint', async (req, res) => {
 // 3. TikTok APIs
 // ==========================================
 app.get('/api/tiktok/info', async (req, res) => {
-    const { url } = req.query; // رابط التيك توك
+    const { url } = req.query;
 
     const tiktokApis = [
         {
@@ -109,7 +110,6 @@ app.get('/api/livestream', async (req, res) => {
             url: `https://all-sport-live-stream.p.rapidapi.com/esid`,
             headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'all-sport-live-stream.p.rapidapi.com' }
         }
-        // يمكنك إضافة مصادر بث احتياطية أخرى هنا مستقبلاً
     ];
 
     try {
@@ -126,32 +126,28 @@ app.get('/api/livestream', async (req, res) => {
 const DOWNLOAD_DIR = path.join(__dirname, 'downloads');
 if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR);
 
-io.on('connection', (socket) => { //[cite: 4]
+io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
     const userVideoPath = path.join(DOWNLOAD_DIR, `${socket.id}.mp4`);
 
     socket.on('request_video', async (youtubeUrl) => {
         try {
-            // باستخدام ytdl-core المدمج كونه الأفضل في تحميل مسار الفيديو كـ Stream[cite: 4]
-            const videoStream = ytdl(youtubeUrl, { quality: 'lowest' }); //[cite: 4]
+            const videoStream = ytdl(youtubeUrl, { quality: 'lowest' });
             const writeStream = fs.createWriteStream(userVideoPath);
-            
+
             videoStream.pipe(writeStream);
 
             writeStream.on('finish', () => {
-                // إبلاغ العميل بأن الفيديو جاهز للعمل 
                 socket.emit('video_ready', `/stream/${socket.id}`);
             });
-            
+
         } catch (error) {
             socket.emit('video_error', 'حدث خطأ أثناء تحميل الفيديو.');
         }
     });
 
-    // استشعار خروج المستخدم (إغلاق المتصفح أو الصفحة)
-    socket.on('disconnect', () => { //[cite: 4]
+    socket.on('disconnect', () => {
         console.log(`User disconnected: ${socket.id}`);
-        // مسح الفيديو الخاص بهذا المستخدم من السيرفر فوراً
         if (fs.existsSync(userVideoPath)) {
             fs.unlinkSync(userVideoPath);
             console.log(`Video deleted for user: ${socket.id}`);
@@ -159,18 +155,21 @@ io.on('connection', (socket) => { //[cite: 4]
     });
 });
 
-// مسار تشغيل الفيديو (Stream) للمستخدم
-app.get('/stream/:id', (req, res) => { //[cite: 4]
+app.get('/stream/:id', (req, res) => {
     const videoPath = path.join(DOWNLOAD_DIR, `${req.params.id}.mp4`);
     if (fs.existsSync(videoPath)) {
-        res.sendFile(videoPath); //[cite: 4]
+        res.sendFile(videoPath);
     } else {
         res.status(404).send('Video not found or already deleted.');
     }
 });
 
-// تشغيل السيرفر
+// ضمان توجيه كافة المسارات غير المعرفة إلى index.html لعمل الواجهة
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Server is running on http://localhost:${PORT}`);
 });
