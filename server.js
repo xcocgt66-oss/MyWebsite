@@ -186,14 +186,56 @@ app.get('/api/stream', (req, res) => {
             options.headers['Range'] = range;
         }
 
+        // مهلة زمنية لمنع تعليق الطلب إلى الأبد إذا كان رابط الفيديو "مخنوقاً" (throttled) من طرف يوتيوب
+        // أو لم يستجب مصدر الفيديو إطلاقاً - بدون هذا، المشغل يبقى فارغاً بدون أي خطأ ظاهر
+        const CONNECT_TIMEOUT_MS = 15000; // مهلة الاتصال الأولي والحصول على الهيدرز
+        const STALL_TIMEOUT_MS = 20000;   // مهلة إذا توقف تدفق البيانات بعد بدء البث
+
+        let settled = false;
+        let stallTimer = null;
+
+        const failOnce = (message, status = 502) => {
+            if (settled) return;
+            settled = true;
+            if (stallTimer) clearTimeout(stallTimer);
+            console.error('[Stream Failure]:', message);
+            if (!res.headersSent) {
+                res.status(status).json({ error: message });
+            } else {
+                res.destroy();
+            }
+        };
+
+        const connectTimer = setTimeout(() => {
+            proxyReq.destroy();
+            failOnce('انتهت مهلة الاتصال بمصدر الفيديو - الرابط قد يكون منتهي الصلاحية أو مخنوقاً (throttled)', 504);
+        }, CONNECT_TIMEOUT_MS);
+
+        const armStallTimer = () => {
+            if (stallTimer) clearTimeout(stallTimer);
+            stallTimer = setTimeout(() => {
+                proxyReq.destroy();
+                failOnce('توقف بث الفيديو فجأة (stalled) - على الأرجح يوتيوب يقوم بخنق الرابط', 504);
+            }, STALL_TIMEOUT_MS);
+        };
+
         const proxyReq = client.request(options, (proxyRes) => {
+            clearTimeout(connectTimer);
+            settled = true; // وصلنا للهيدرز بنجاح، أي فشل بعد هذا سيُعالج عبر pipe error فقط
+
             if ([301, 302, 303, 307, 308].includes(proxyRes.statusCode) && proxyRes.headers.location) {
                 proxyRes.resume();
                 let nextUrl = proxyRes.headers.location;
                 if (nextUrl.startsWith('/')) {
                     nextUrl = `${parsedUrl.protocol}//${parsedUrl.host}${nextUrl}`;
                 }
+                settled = false;
                 return doRequest(nextUrl, redirectCount + 1);
+            }
+
+            if (proxyRes.statusCode >= 400) {
+                proxyRes.resume();
+                return failOnce(`مصدر الفيديو رفض الطلب برمز حالة ${proxyRes.statusCode}`, 502);
             }
 
             const headersToForward = ['content-type', 'content-length', 'accept-ranges', 'content-range', 'transfer-encoding'];
@@ -202,22 +244,37 @@ app.get('/api/stream', (req, res) => {
                     res.setHeader(h, proxyRes.headers[h]);
                 }
             });
+            // يضمن أن المشغل نفس الصفحة يستطيع قراءة البث حتى لو تغير الأصل لاحقاً
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            if (!proxyRes.headers['content-type']) {
+                res.setHeader('content-type', 'video/mp4');
+            }
 
             res.status(proxyRes.statusCode);
+
+            // راقب توقف تدفق البيانات (throttling) - كل جزء بيانات يُعيد ضبط المؤقت
+            armStallTimer();
+            proxyRes.on('data', () => armStallTimer());
+            proxyRes.on('end', () => { if (stallTimer) clearTimeout(stallTimer); });
+
             proxyRes.pipe(res);
 
             proxyRes.on('error', (err) => {
+                if (stallTimer) clearTimeout(stallTimer);
                 console.error('[Stream Pipe Error]:', err.message);
                 if (!res.headersSent) res.status(500).send('Stream error');
+                else res.destroy();
             });
         });
 
         proxyReq.on('error', (err) => {
-            console.error('[Stream Request Error]:', err.message);
-            if (!res.headersSent) res.status(500).send('Stream connection error');
+            clearTimeout(connectTimer);
+            failOnce(`تعذر الاتصال بمصدر الفيديو: ${err.message}`, 502);
         });
 
         req.on('close', () => {
+            clearTimeout(connectTimer);
+            if (stallTimer) clearTimeout(stallTimer);
             proxyReq.destroy();
         });
 
