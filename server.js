@@ -53,6 +53,39 @@ const handleYoutubeRequest = async (req, res) => {
     const url = req.body.url || req.query.url;
     if (!url) return res.status(400).json({ error: 'الرجاء توفير رابط يوتيوب' });
 
+    // 1. المحاولة الأولى: استخدام Cobalt API لجلب 720p/1080p مدمجة بالصوت والفيديو
+    try {
+        const cobaltRes = await axios.post('https://api.cobalt.tools/', {
+            url: url,
+            videoQuality: '720',
+            downloadMode: 'auto'
+        }, {
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
+            timeout: 7000
+        });
+
+        if (cobaltRes.data && (cobaltRes.data.url || cobaltRes.data.picker)) {
+            const hdUrl = cobaltRes.data.url || cobaltRes.data.picker[0]?.url;
+            if (hdUrl) {
+                console.log(`[Success] Fetched HD Direct Stream (720p+) via Cobalt API`);
+                return res.json({
+                    success: true,
+                    url: hdUrl,
+                    link: hdUrl,
+                    stream_url: hdUrl,
+                    file: hdUrl,
+                    title: 'YouTube Video (HD 720p+)'
+                });
+            }
+        }
+    } catch (err) {
+        console.log('[Info] Cobalt API skipped, falling back to RapidAPI...');
+    }
+
+    // 2. المحاولة الثانية: RapidAPI كخيار احتياطي
     const youtubeApis = [
         {
             method: 'GET',
