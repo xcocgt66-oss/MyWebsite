@@ -68,31 +68,50 @@ const handleYoutubeRequest = async (req, res) => {
         }
     ];
 
+    const extractHeight = (format) => {
+        if (typeof format.height === 'number' && format.height > 0) return format.height;
+        const label = format.qualityLabel || format.quality || '';
+        const match = String(label).match(/\d+/);
+        if (match) return parseInt(match[0], 10);
+        if (label === 'hd1080') return 1080;
+        if (label === 'hd720') return 720;
+        if (label === 'medium') return 360;
+        if (label === 'small') return 240;
+        return 0;
+    };
+
     try {
         const data = await fetchWithFallback(youtubeApis);
         let mediaUrl = '';
+        let allFormats = [];
 
-        if (data.formats && Array.isArray(data.formats) && data.formats.length > 0) {
-            const playableFormats = data.formats.filter(f => f.url && f.hasAudio !== false);
-            playableFormats.sort((a, b) => {
-                const heightA = a.height || parseInt(a.qualityLabel) || 0;
-                const heightB = b.height || parseInt(b.qualityLabel) || 0;
-                return heightB - heightA;
+        if (Array.isArray(data.formats)) {
+            allFormats = allFormats.concat(data.formats);
+        }
+        if (Array.isArray(data.videos?.items)) {
+            allFormats = allFormats.concat(data.videos.items);
+        }
+
+        if (allFormats.length > 0) {
+            const playableFormats = allFormats.filter(f => {
+                const hasUrl = Boolean(f.url || f.link);
+                const hasAudio = f.hasAudio !== false && f.audioBitrate !== 0;
+                const hasVideo = f.hasVideo !== false;
+                return hasUrl && hasAudio && hasVideo;
             });
+
+            playableFormats.sort((a, b) => extractHeight(b) - extractHeight(a));
+
             if (playableFormats.length > 0) {
-                mediaUrl = playableFormats[0].url;
+                const bestFormat = playableFormats[0];
+                mediaUrl = bestFormat.url || bestFormat.link;
+                console.log(`[Success] Selected Resolution: ${extractHeight(bestFormat)}p | Quality: ${bestFormat.qualityLabel || bestFormat.quality || 'HD'}`);
             }
         }
 
         if (!mediaUrl) {
-            if (data.videos?.items && data.videos.items.length > 0) {
-                const sortedItems = [...data.videos.items].sort((a, b) => (b.height || 0) - (a.height || 0));
-                mediaUrl = sortedItems[0].url;
-            } else if (typeof data.link === 'string') {
-                mediaUrl = data.link;
-            } else if (typeof data.url === 'string') {
-                mediaUrl = data.url;
-            }
+            if (typeof data.link === 'string') mediaUrl = data.link;
+            else if (typeof data.url === 'string') mediaUrl = data.url;
         }
 
         if (!mediaUrl) {
@@ -108,6 +127,7 @@ const handleYoutubeRequest = async (req, res) => {
             title: data.title || 'YouTube Video'
         });
     } catch (error) {
+        console.error("Youtube API Error:", error.message);
         res.status(500).json({ error: 'حدث خطأ أثناء الاتصال بالـ API.' });
     }
 };
