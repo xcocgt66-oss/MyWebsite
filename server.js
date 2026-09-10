@@ -29,7 +29,7 @@ async function fetchWithFallback(apiList) {
 }
 
 // ==========================================
-// 1. مسارات التيك توك الشاملة + نظام البحث الجديد
+// 1. مسارات التيك توك وتحميل الفيديوهات
 // ==========================================
 const handleTikTokRequest = async (req, res) => {
     const url = req.body.url || req.query.url || req.body.link || req.query.link;
@@ -53,39 +53,39 @@ app.all('/api/tiktok', handleTikTokRequest);
 app.all('/api/tiktok/play', handleTikTokRequest);
 app.all('/api/download', handleTikTokRequest);
 
-// مسار بحث تيك توك الجديد (tiktok-api23) مع إمكانية تحديد وسيلة البحث والكلمة المفتاحية
+// مسار بحث تيك توك الشامل (يدعم تحديد النوع: user, video, live, general, photo, others)
 app.all('/api/tiktok/search', async (req, res) => {
     const keyword = req.query.keyword || req.body.keyword;
-    const searchType = req.query.type || req.body.type || 'others-searched-for'; // الافتراضي أو حسب الاختيار (general, video, account, live, photo, others-searched-for...)
+    const searchType = req.query.type || req.body.type || 'general'; // نوع البحث الافتراضي
     
     if (!keyword) return res.status(400).json({ error: 'الرجاء إدخال الكلمة المفتاحية للبحث' });
 
-    // تحديد الـ Endpoint بناءً على وسيلة البحث المطلوبة
-    let endpointPath = 'others-searched-for';
-    if (searchType === 'general') endpointPath = 'search-general';
-    else if (searchType === 'video') endpointPath = 'search-video';
-    else if (searchType === 'account') endpointPath = 'search-user';
-    else if (searchType === 'live') endpointPath = 'search-live';
-    else if (searchType === 'photo') endpointPath = 'search-photo';
+    // مطابقة تامة لمسارات api23 الصحيحة
+    let endpoint = 'search-general';
+    if (searchType === 'user' || searchType === 'account') endpoint = 'search-user';
+    else if (searchType === 'video') endpoint = 'search-video';
+    else if (searchType === 'live') endpoint = 'search-live';
+    else if (searchType === 'photo') endpoint = 'search-photo';
+    else if (searchType === 'others') endpoint = 'others-searched-for';
 
     try {
         const response = await axios({
             method: 'GET',
-            url: `https://tiktok-api23.p.rapidapi.com/api/search/${endpointPath}`,
+            url: `https://tiktok-api23.p.rapidapi.com/api/search/${endpoint}`,
             headers: {
                 'X-Rapidapi-Key': RAPID_API_KEY,
                 'X-Rapidapi-Host': 'tiktok-api23.p.rapidapi.com'
             },
-            params: { keyword }
+            params: { keyword, count: 20 }
         });
         res.json(response.data);
     } catch (err) {
-        res.status(500).json({ error: 'فشل تنفيذ البحث عبر تيك توك API' });
+        res.status(500).json({ error: 'فشل تنفيذ البحث، تأكد من صحة الكلمة أو نوع البحث.' });
     }
 });
 
 // ==========================================
-// 2. مسارات اليوتيوب والفيديو (جودة 720p+)
+// 2. مسارات اليوتيوب والفيديو (جودة عالية 720p+)
 // ==========================================
 const handleYoutubeRequest = async (req, res) => {
     const url = req.body.url || req.query.url;
@@ -158,36 +158,55 @@ app.all('/api/football/:endpoint', async (req, res) => {
 });
 
 // ==========================================
-// 4. نظام الشات الأصلي (المنشن، المتصلين، والأصوات)
+// 4. نظام الشات الذكي (إصلاح المتصلين و منع undefined)
 // ==========================================
 const connectedUsers = {};
 
 io.on('connection', (socket) => {
-    console.log(`User connected: ${socket.id}`);
-    connectedUsers[socket.id] = { id: socket.id, name: `User_${socket.id.substring(0, 4)}` };
+    // تسجيل المستخدم تلقائياً فور دخوله لتجنب 0 متصلين وتجنب undefined
+    const defaultName = `User_${socket.id.substring(0, 4)}`;
+    connectedUsers[socket.id] = { id: socket.id, name: defaultName };
 
+    // تحديث قائمة المتصلين للجميع فوراً
     io.emit('online_users', Object.values(connectedUsers));
+    io.emit('update_online_users', Object.values(connectedUsers));
 
+    // استقبال وتحديث الاسم الحقيقي إذا أرسلته الواجهة
     socket.on('set_username', (name) => {
-        if (name) {
-            connectedUsers[socket.id].name = name;
+        if (name && name !== 'undefined' && name.trim() !== '') {
+            connectedUsers[socket.id].name = name.trim();
             io.emit('online_users', Object.values(connectedUsers));
+            io.emit('update_online_users', Object.values(connectedUsers));
         }
     });
 
-    socket.on('chat_message', (data) => {
-        io.emit('chat_message', data);
-    });
+    // معالجة الرسائل ومنع ظهور undefined في اسم المرسل
+    const processMessage = (data) => {
+        let msgObj = {};
+        if (typeof data === 'object' && data !== null) {
+            msgObj = { ...data };
+            if (!msgObj.user || msgObj.user === 'undefined') msgObj.user = connectedUsers[socket.id]?.name || defaultName;
+            if (!msgObj.username || msgObj.username === 'undefined') msgObj.username = msgObj.user;
+        } else {
+            msgObj = {
+                user: connectedUsers[socket.id]?.name || defaultName,
+                username: connectedUsers[socket.id]?.name || defaultName,
+                message: String(data),
+                text: String(data),
+                time: new Date().toLocaleTimeString()
+            };
+        }
+        io.emit('chat_message', msgObj);
+        io.emit('receive_message', msgObj);
+    };
 
-    socket.on('send_message', (data) => {
-        io.emit('receive_message', data);
-        io.emit('chat_message', data);
-    });
+    socket.on('chat_message', processMessage);
+    socket.on('send_message', processMessage);
 
     socket.on('disconnect', () => {
         delete connectedUsers[socket.id];
         io.emit('online_users', Object.values(connectedUsers));
-        console.log(`User disconnected: ${socket.id}`);
+        io.emit('update_online_users', Object.values(connectedUsers));
     });
 });
 
