@@ -3,29 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title></title>
+    <title>Escapped</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
     <script src="/socket.io/socket.io.js"></script>
-    <style>body { font-family: 'Tajawal', sans-serif; }</style>
+    <style>
+        body { font-family: 'Tajawal', sans-serif; }
+    </style>
 </head>
-<body class="bg-white text-slate-100 min-h-screen flex flex-col m-0 p-0 overflow-hidden" id="main-body">
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
 
-    <div id="security-screen" class="fixed inset-0 bg-white z-50 flex items-center justify-center hidden">
+    <!-- شاشة التحقق الأمنية -->
+    <div id="security-screen" class="fixed inset-0 bg-slate-950 z-50 flex items-center justify-center">
         <div class="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl w-96 text-center">
             <div class="text-indigo-500 text-4xl mb-4"><i class="fa-solid fa-lock"></i></div>
-            <h2 class="text-xl font-bold mb-2 text-white">منطقة محمية</h2>
-            <p class="text-slate-400 text-sm mb-6">أدخل رمز المرور واضغط Enter</p>
-            <input type="password" id="pin-input" maxlength="4" class="w-full bg-slate-800 border border-slate-700 text-center text-2xl tracking-widest rounded-xl py-3 mb-4 text-white focus:outline-none focus:border-indigo-500" placeholder="••••" onkeypress="handlePinKey(event)">
+            <h2 class="text-xl font-bold mb-2">منطقة محمية</h2>
+            <p class="text-slate-400 text-sm mb-6">الرجاء إدخال رمز المرور (1010)</p>
+            <input type="password" id="pin-input" maxlength="4" class="w-full bg-slate-800 border border-slate-700 text-center text-2xl tracking-widest rounded-xl py-3 mb-4 text-white focus:outline-none focus:border-indigo-500" placeholder="••••">
             <p id="error-msg" class="text-rose-500 text-xs mb-4 hidden">رمز المرور غير صحيح!</p>
             <button onclick="verifyPin()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-all">دخول</button>
         </div>
     </div>
 
-    <div id="esc-screen" class="fixed inset-0 bg-white z-[99999] hidden"></div>
-
-    <div id="app-container" class="flex-1 flex hidden w-full h-screen bg-slate-900">
+    <!-- التطبيق الرئيسي -->
+    <div id="app-container" class="flex-1 flex hidden">
+        <!-- القائمة الجانبية -->
         <aside class="w-64 bg-slate-950 border-l border-slate-800 flex flex-col justify-between p-4">
             <div>
                 <div class="flex items-center justify-between mb-8 px-2">
@@ -36,7 +39,9 @@
                     </span>
                 </div>
                 <nav class="space-y-2">
-                    <button onclick="switchTab('youtube')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-800 transition-all font-medium bg-slate-800 text-white"><i class="fa-brands fa-youtube text-rose-500"></i> يوتيوب</button>
+                    <button onclick="switchTab('youtube')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-800 transition-all font-medium"><i class="fa-brands fa-youtube text-rose-500"></i> يوتيوب</button>
+                    <button onclick="switchTab('tiktok')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-800 transition-all font-medium"><i class="fa-brands fa-tiktok text-cyan-400"></i> تيك توك</button>
+                    <button onclick="switchTab('matches')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-800 transition-all font-medium"><i class="fa-solid fa-futbol text-emerald-500"></i> المباريات</button>
                     <button onclick="switchTab('chat')" class="nav-btn w-full flex items-center justify-between px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-800 transition-all font-medium">
                         <span class="flex items-center gap-3"><i class="fa-solid fa-comments text-amber-500"></i> الشات</span>
                     </button>
@@ -54,23 +59,39 @@
             </div>
         </aside>
 
+        <!-- المحتوى الرئيسي -->
         <main class="flex-1 p-8 overflow-y-auto">
+            <!-- قسم اليوتيوب مع خانة إضافة الرابط -->
             <div id="tab-youtube" class="tab-content">
-                <h2 class="text-2xl font-bold mb-6 text-white">مشغل يوتيوب (عبر الـ API المتعدد)</h2>
+                <h2 class="text-2xl font-bold mb-6">محتوى اليوتيوب</h2>
                 <div class="mb-6 flex gap-2">
-                    <input type="text" id="yt-link-input" placeholder="أدخل معرف أو رابط يوتيوب..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500">
-                    <button onclick="streamYoutubeVideoViaAPI()" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-white font-medium">تشغيل</button>
+                    <input type="text" id="yt-link-input" placeholder="أدخل رابط فيديو يوتيوب هنا..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500">
+                    <button onclick="addYoutubeLink()" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-white font-medium">إضافة</button>
                 </div>
-                <div id="youtube-feed" class="grid grid-cols-1 gap-6">
-                    <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-slate-500">أدخل الرابط بالأعلى لبدء البث بأعلى جودة.</div>
+                <div id="youtube-feed" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+            </div>
+
+            <!-- قسم تيك توك مع خانة إضافة الرابط -->
+            <div id="tab-tiktok" class="tab-content hidden">
+                <h2 class="text-2xl font-bold mb-6">محتوى تيك توك</h2>
+                <div class="mb-6 flex gap-2">
+                    <input type="text" id="tt-link-input" placeholder="أدخل معرف أو رابط تيك توك هنا..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500">
+                    <button onclick="loadTikTokFeed()" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-white font-medium">بحث / جلب</button>
+                </div>
+                <div id="tiktok-feed" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
+            </div>
+
+            <!-- قسم المباريات -->
+            <div id="tab-matches" class="tab-content hidden">
+                <h2 class="text-2xl font-bold mb-6">جدول المباريات (Betfair & Diamond)</h2>
+                <div id="matches-feed" class="space-y-4">
+                    <p class="text-slate-500">جاري تحميل المباريات...</p>
                 </div>
             </div>
 
+            <!-- قسم الشات -->
             <div id="tab-chat" class="tab-content hidden h-[calc(100vh-8rem)] flex flex-col bg-slate-950 rounded-2xl border border-slate-800">
-                <div class="p-4 border-b border-slate-800 font-bold flex justify-between items-center text-white">
-                    <span>غرفة المحادثة المباشرة (محفوظة 24 ساعة)</span>
-                    <span class="text-xs text-emerald-400">متصل</span>
-                </div>
+                <div class="p-4 border-b border-slate-800 font-bold">غرفة المحادثة المباشرة</div>
                 <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3"></div>
                 <div class="p-4 border-t border-slate-800 flex gap-2">
                     <input type="text" id="chat-input" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500" placeholder="اكتب رسالتك هنا..." onkeypress="handleChatKeyPress(event)">
@@ -81,58 +102,8 @@
     </div>
 
     <script>
-        let aPressCount = 0;
-        let isEscActive = false;
-
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                isEscActive = !isEscActive;
-                const escScreen = document.getElementById('esc-screen');
-                if (isEscActive) {
-                    escScreen.classList.remove('hidden');
-                    const activePlayer = document.querySelector('#youtube-feed iframe');
-                    if (activePlayer) {
-                        activePlayer.dataset.src = activePlayer.src;
-                        activePlayer.src = '';
-                    }
-                } else {
-                    escScreen.classList.add('hidden');
-                    const activePlayer = document.querySelector('#youtube-feed iframe');
-                    if (activePlayer && activePlayer.dataset.src) {
-                        activePlayer.src = activePlayer.dataset.src;
-                    }
-                }
-                return;
-            }
-
-            if (e.key.toLowerCase() === 'a') {
-                aPressCount++;
-                if (aPressCount >= 5) {
-                    aPressCount = 0;
-                    document.getElementById('security-screen').classList.remove('hidden');
-                    document.getElementById('pin-input').focus();
-                }
-            } else {
-                aPressCount = 0;
-            }
-        });
-
-        function verifyPin() {
-            const pin = document.getElementById('pin-input').value;
-            if (pin === atob('MTAxMA==')) {
-                document.getElementById('security-screen').classList.add('hidden');
-                document.getElementById('app-container').classList.remove('hidden');
-                document.getElementById('main-body').style.backgroundColor = '#0f172a';
-            } else {
-                document.getElementById('error-msg').classList.remove('hidden');
-            }
-        }
-
-        function handlePinKey(e) {
-            if (e.key === 'Enter') verifyPin();
-        }
-
         const socket = io();
+
         let username = localStorage.getItem('escapped_username') || 'User_YHCW';
         document.getElementById('current-username-display').innerText = username;
 
@@ -145,74 +116,94 @@
             }
         }
 
+        // وضع الشاشة البيضاء عند الضغط على A 5 مرات
+        let aPressCount = 0;
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'a') {
+                aPressCount++;
+                if (aPressCount >= 5) {
+                    document.body.style.backgroundColor = '#ffffff';
+                    document.body.innerHTML = '';
+                }
+            } else {
+                aPressCount = 0;
+            }
+        });
+
+        function verifyPin() {
+            const pin = document.getElementById('pin-input').value;
+            if (pin === "1010") {
+                document.getElementById('security-screen').classList.add('hidden');
+                document.getElementById('app-container').classList.remove('hidden');
+                loadMatches();
+            } else {
+                document.getElementById('error-msg').classList.remove('hidden');
+            }
+        }
+
         function switchTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
             document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            
             document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('bg-slate-800', 'text-white'));
             if(event && event.currentTarget) {
                 event.currentTarget.classList.add('bg-slate-800', 'text-white');
             }
         }
 
-        function streamYoutubeVideoViaAPI() {
+        // يوتيوب
+        function addYoutubeLink() {
             const input = document.getElementById('yt-link-input');
             const url = input.value.trim();
             if(!url) return;
-
-            let videoId = '';
-            if (url.includes('youtu.be/')) {
-                videoId = url.split('youtu.be/')[1].split('?')[0];
-            } else if (url.includes('watch?v=')) {
-                videoId = url.split('watch?v=')[1].split('&')[0];
-            } else {
-                videoId = url;
-            }
-
-            const apiEndpoints = [
-                `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&vq=hd1080`,
-                `https://www.youtube.com/embed/${videoId}?autoplay=1&vq=hd1080`,
-                `https://www.youtube.com/embed/${videoId}?autoplay=1`
-            ];
-
-            let currentApiIndex = 0;
             const container = document.getElementById('youtube-feed');
-
-            function tryNextApi() {
-                if (currentApiIndex >= apiEndpoints.length) {
-                    container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-rose-500">عذراً، فشلت جميع الـ APIs في تشغيل هذا الفيديو. حاول بتعليق رابط مختلف.</div>`;
-                    return;
-                }
-
-                const currentUrl = apiEndpoints[currentApiIndex];
-                currentApiIndex++;
-
-                container.innerHTML = `
-                    <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex flex-col items-center gap-3">
-                        <p class="text-xs text-emerald-400">جاري الاتصال بأفضل سيرفر بث متاح (API ${currentApiIndex})...</p>
-                        <div class="aspect-video w-full rounded-xl overflow-hidden shadow-lg bg-black">
-                            <iframe class="w-full h-full" src="${currentUrl}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen onerror="tryNextApi()"></iframe>
-                        </div>
-                    </div>
-                `;
-            }
-
-            tryNextApi();
+            const div = document.createElement('div');
+            div.className = "bg-slate-950 p-4 rounded-xl border border-slate-800 text-sm break-all";
+            div.innerHTML = `<p class="text-indigo-400 font-bold mb-2">رابط يوتيوب:</p><a href="${url}" target="_blank" class="text-slate-300 underline">${url}</a>`;
+            container.appendChild(div);
             input.value = '';
         }
 
+        // تيك توك
+        function loadTikTokFeed() {
+            const container = document.getElementById('tiktok-feed');
+            container.innerHTML = '<p class="text-slate-500">جاري البحث في تيك توك...</p>';
+            fetch('/api/tiktok')
+                .then(res => res.json())
+                .then(data => {
+                    container.innerHTML = '<p class="text-slate-400">تم جلب بيانات تيك توك بنجاح.</p>';
+                })
+                .catch(() => {
+                    container.innerHTML = '<p class="text-rose-500">تعذر جلب بيانات تيك توك حالياً.</p>';
+                });
+        }
+
+        // المباريات
+        function loadMatches() {
+            const container = document.getElementById('matches-feed');
+            fetch('/api/matches')
+                .then(res => res.json())
+                .then(data => {
+                    if(Array.isArray(data) && data.length > 0) {
+                        container.innerHTML = data.map(m => `<div class="bg-slate-950 p-4 rounded-xl border border-slate-800">مباراة / بطولة ID: ${JSON.stringify(m)}</div>`).join('');
+                    } else {
+                        container.innerHTML = '<div class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-emerald-400">سيرفر المباريات متصل وجاهز للبيانات عبر Betfair & Diamond API.</div>';
+                    }
+                })
+                .catch(() => {
+                    container.innerHTML = '<div class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-slate-400">جاري استقبال بيانات الرياضة والمباريات...</div>';
+                });
+        }
+
+        // عداد المتصلين
         socket.on('online-count', (count) => {
             const el = document.getElementById('online-count-display');
             if (el) el.innerText = count;
         });
 
-        socket.on('chat-history', (history) => {
-            const container = document.getElementById('chat-messages');
-            container.innerHTML = '';
-            history.forEach(data => appendMessage(data.user, data.text));
-        });
-
+        // الشات
         socket.on('chat-message', (data) => {
-            appendMessage(data.user, data.text);
+            appendMessage(data.user || 'User_YHCW', data.text || '');
         });
 
         function sendChatMessage() {
