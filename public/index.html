@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title></title>
+    <title>Direct API Server</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -137,15 +137,17 @@
                 const data = await response.json();
 
                 if (data.success && data.url) {
+                    const proxyUrl = `/api/stream?url=${encodeURIComponent(data.url)}`;
+                    
                     container.innerHTML = `
                         <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex flex-col items-center gap-3 max-w-3xl w-full shadow-2xl">
                             <div class="w-full flex justify-between items-center px-2">
                                 <h3 class="text-white font-bold text-sm truncate pr-4">${data.title}</h3>
-                                <span class="text-xs text-emerald-400 whitespace-nowrap"><i class="fa-solid fa-link"></i> اتصال مباشر (${quality}p)</span>
+                                <span class="text-xs text-emerald-400 whitespace-nowrap"><i class="fa-solid fa-server"></i> بث عبر السيرفر (${quality}p)</span>
                             </div>
                             <div class="aspect-video w-full rounded-xl overflow-hidden bg-black border border-slate-800">
-                                <video id="native-video-player" controls autoplay class="w-full h-full outline-none object-contain">
-                                    <source src="${data.url}" type="video/mp4">
+                                <video id="native-video-player" controls autoplay playsinline referrerpolicy="no-referrer" crossorigin="anonymous" class="w-full h-full outline-none object-contain">
+                                    <source src="${proxyUrl}" type="video/mp4">
                                     متصفحك لا يدعم مشغل الفيديو المدمج.
                                 </video>
                             </div>
@@ -169,6 +171,27 @@
             const input = document.getElementById('chat-input');
             const text = input.value.trim();
             if (!text) return;
+            
+            socket.emit('chat_message', { user: username, text: text });
+            input.value = '';
+        }
+
+        function handleChatKeyPress(e) {
+            if (e.key === 'Enter') sendChatMessage();
+        }
+
+        function appendMessage(user, text) {
+            const container = document.getElementById('chat-messages');
+            const div = document.createElement('div');
+            div.className = "bg-slate-900 p-3 rounded-xl border border-slate-800/60 break-words";
+            div.innerHTML = `<span class="text-indigo-400 font-bold text-sm ml-2">${user}:</span><span class="text-slate-200 text-sm">${text}</span>`;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+    </script>
+</body>
+</html>
+xt) return;
             
             socket.emit('chat_message', { user: username, text: text });
             input.value = '';
