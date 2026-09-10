@@ -15,8 +15,8 @@
     <div id="security-screen" class="fixed inset-0 bg-white z-50 flex items-center justify-center hidden">
         <div class="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl w-96 text-center">
             <div class="text-indigo-500 text-4xl mb-4"><i class="fa-solid fa-lock"></i></div>
-            <h2 class="text-xl font-bold mb-2 text-white">منطقة محمية</h2>
-            <p class="text-slate-400 text-sm mb-6">أدخل رمز المرور واضغط Enter</p>
+            <h2 class="text-xl font-bold mb-2 text-white">PIN</h2>
+            <p class="text-slate-400 text-sm mb-6">أدخل رمز المرور</p>
             <input type="password" id="pin-input" maxlength="4" class="w-full bg-slate-800 border border-slate-700 text-center text-2xl tracking-widest rounded-xl py-3 mb-4 text-white focus:outline-none focus:border-indigo-500" placeholder="••••" onkeypress="handlePinKey(event)">
             <p id="error-msg" class="text-rose-500 text-xs mb-4 hidden">رمز المرور غير صحيح!</p>
             <button onclick="verifyPin()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-all">دخول</button>
