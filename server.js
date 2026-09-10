@@ -56,10 +56,11 @@ const handleTikTokRequest = async (req, res) => {
 
 app.all('/api/tiktok/info', handleTikTokRequest);
 app.all('/api/tiktok', handleTikTokRequest);
+app.all('/api/tiktok/play', handleTikTokRequest);
 app.all('/api/download', handleTikTokRequest);
 
 // ==========================================
-// 2. مسارات اليوتيوب والفيديو
+// 2. مسارات اليوتيوب والفيديو (مطابقة تامة لواجهتك)
 // ==========================================
 const handleYoutubeRequest = async (req, res) => {
     const url = req.body.url || req.query.url;
@@ -80,6 +81,7 @@ const handleYoutubeRequest = async (req, res) => {
 };
 
 app.all('/api/youtube', handleYoutubeRequest);
+app.all('/api/youtube/play', handleYoutubeRequest); // المسار الجديد اللي ظهر في صورتك
 app.all('/api/video', handleYoutubeRequest);
 app.all('/api/media', handleYoutubeRequest);
 
@@ -123,7 +125,7 @@ io.on('connection', (socket) => {
 });
 
 // ==========================================
-// 5. حماية صارمة: منع أي مسار API مفقود من إرجاع HTML
+// 5. حماية مسارات الـ API
 // ==========================================
 app.all('/api/*', (req, res) => {
     res.status(404).json({ error: `API endpoint not found: ${req.originalUrl}` });
