@@ -53,13 +53,13 @@
 
         <main class="flex-1 p-8 overflow-y-auto">
             <div id="tab-youtube" class="tab-content">
-                <h2 class="text-2xl font-bold mb-6 text-white">المشغل المباشر (Direct API Server)</h2>
-                <div class="mb-6 flex gap-2">
+                <h2 class="text-2xl font-bold mb-6 text-white text-center">المشغل المباشر (Direct API Server)</h2>
+                <div class="mb-6 flex gap-2 max-w-3xl mx-auto">
                     <input type="text" id="yt-link-input" placeholder="أدخل رابط الميديا (يوتيوب وغيرها)..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500">
                     <button onclick="fetchAndPlayMedia()" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-white font-medium">سحب وتشغيل</button>
                 </div>
-                <div id="media-feed" class="grid grid-cols-1 gap-6">
-                    <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-slate-500">أدخل الرابط لسحب الملف المباشر من السيرفر الخاص بك.</div>
+                <div id="media-feed" class="w-full flex justify-center">
+                    <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-slate-500 max-w-3xl w-full">أدخل الرابط لسحب الملف المباشر من السيرفر الخاص بك.</div>
                 </div>
             </div>
 
@@ -151,7 +151,7 @@
             if(!url) return;
 
             const container = document.getElementById('media-feed');
-            container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-indigo-400"><i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i><br>جاري الاتصال بالسيرفر وسحب الرابط المباشر...</div>`;
+            container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-indigo-400 max-w-3xl w-full"><i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i><br>جاري الاتصال بالسيرفر وسحب الرابط المباشر بأعلى جودة...</div>`;
 
             try {
                 const response = await fetch('/api/youtube', {
@@ -166,13 +166,13 @@
 
                 if (data.success && data.url) {
                     container.innerHTML = `
-                        <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex flex-col items-center gap-3">
+                        <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex flex-col items-center gap-3 max-w-3xl w-full shadow-2xl">
                             <div class="w-full flex justify-between items-center px-2">
                                 <h3 class="text-white font-bold text-sm truncate pr-4">${data.title}</h3>
-                                <span class="text-xs text-emerald-400 whitespace-nowrap"><i class="fa-solid fa-link"></i> اتصال مباشر</span>
+                                <span class="text-xs text-emerald-400 whitespace-nowrap"><i class="fa-solid fa-link"></i> اتصال مباشر (HD)</span>
                             </div>
-                            <div class="aspect-video w-full rounded-xl overflow-hidden shadow-lg bg-black">
-                                <video id="native-video-player" controls autoplay class="w-full h-full outline-none">
+                            <div class="aspect-video w-full rounded-xl overflow-hidden bg-black border border-slate-800">
+                                <video id="native-video-player" controls autoplay class="w-full h-full outline-none object-contain">
                                     <source src="${data.url}" type="video/mp4">
                                     متصفحك لا يدعم مشغل الفيديو المدمج.
                                 </video>
@@ -180,10 +180,10 @@
                         </div>
                     `;
                 } else {
-                    container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-rose-500">فشل في استخراج الرابط المباشر. تأكد من صحة الرابط أو حالة الـ API.</div>`;
+                    container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-rose-500 max-w-3xl w-full">فشل في استخراج الرابط المباشر. تأكد من صحة الرابط أو حالة الـ API.</div>`;
                 }
             } catch (err) {
-                container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-rose-500">تعذر الاتصال بالسيرفر. تأكد أن سيرفر الـ Node.js يعمل.</div>`;
+                container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-rose-500 max-w-3xl w-full">تعذر الاتصال بالسيرفر. تأكد أن سيرفر الـ Node.js يعمل.</div>`;
             }
             
             input.value = '';
