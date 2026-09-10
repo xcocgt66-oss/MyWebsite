@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const http = require('http');
+const https = require('https');
 const { Server } = require('socket.io');
 const path = require('path');
 const cors = require('cors');
@@ -147,64 +148,87 @@ app.all('/api/youtube/play', handleYoutubeRequest);
 app.all('/api/video', handleYoutubeRequest);
 app.all('/api/media', handleYoutubeRequest);
 
-// البروكسي الحقيقي لبث الفيديو أجزاءً بأجزاء (Real-time Chunked Streaming) دون تحويل
-app.get('/api/stream', async (req, res) => {
+// البروكسي الحقيقي لبث الفيديو أجزاءً بأجزاء (Real-time Chunked Streaming) باستخدام Native Node.js Requests
+app.get('/api/stream', (req, res) => {
     let streamUrl = req.query.url;
     
     if (Array.isArray(streamUrl)) streamUrl = streamUrl[0];
-    if (!streamUrl || typeof streamUrl !== 'string') return res.status(400).send('No video URL provided');
+    if (!streamUrl || typeof streamUrl !== 'string') {
+        return res.status(400).send('No video URL provided');
+    }
 
-    try {
-        const range = req.headers.range || 'bytes=0-';
-        const headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Range': range,
-            'Accept': 'video/webm,video/ogg,video/mp4,audio/webm,audio/ogg,audio/wav,*/*;q=0.9',
-            'Accept-Encoding': 'identity',
-            'Referer': 'https://www.youtube.com/',
-            'Origin': 'https://www.youtube.com/'
+    const range = req.headers.range;
+
+    function doRequest(targetUrl, redirectCount = 0) {
+        if (redirectCount > 5) {
+            if (!res.headersSent) res.status(500).send('Too many redirects');
+            return;
+        }
+
+        const client = targetUrl.startsWith('https') ? https : http;
+        const parsedUrl = new URL(targetUrl);
+        
+        const options = {
+            hostname: parsedUrl.hostname,
+            port: parsedUrl.port || (targetUrl.startsWith('https') ? 443 : 80),
+            path: parsedUrl.pathname + parsedUrl.search,
+            method: 'GET',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Encoding': 'identity',
+                'Connection': 'keep-alive',
+                'Referer': 'https://www.youtube.com/'
+            }
         };
 
-        const response = await axios({
-            method: 'GET',
-            url: streamUrl,
-            responseType: 'stream',
-            headers: headers,
-            timeout: 30000,
-            validateStatus: status => status >= 200 && status < 300
-        });
+        if (range) {
+            options.headers['Range'] = range;
+        }
 
-        // تمرير كافة رؤوس البيانات الأساسية ليفهم المتصفح أن الملف يدعم الـ Seeking والـ Chunking
-        const headersToForward = ['content-type', 'content-length', 'accept-ranges', 'content-range', 'connection'];
-        headersToForward.forEach(h => {
-            if (response.headers[h]) {
-                res.setHeader(h, response.headers[h]);
+        const proxyReq = client.request(options, (proxyRes) => {
+            // التعامل التلقائي مع الروابط المعاد توجيهها (Redirects)
+            if ([301, 302, 303, 307, 308].includes(proxyRes.statusCode) && proxyRes.headers.location) {
+                proxyRes.resume();
+                let nextUrl = proxyRes.headers.location;
+                if (nextUrl.startsWith('/')) {
+                    nextUrl = `${parsedUrl.protocol}//${parsedUrl.host}${nextUrl}`;
+                }
+                return doRequest(nextUrl, redirectCount + 1);
             }
+
+            // تمرير الـ Headers الأساسية ليعمل الـ Seeking والـ Chunking في المشغل
+            const headersToForward = ['content-type', 'content-length', 'accept-ranges', 'content-range', 'transfer-encoding'];
+            headersToForward.forEach(h => {
+                if (proxyRes.headers[h]) {
+                    res.setHeader(h, proxyRes.headers[h]);
+                }
+            });
+
+            res.status(proxyRes.statusCode);
+            
+            // ضخ الـ Chunks للمتصفح أولاً بأول (Real-time buffering)
+            proxyRes.pipe(res);
+
+            proxyRes.on('error', (err) => {
+                console.error('[Stream Pipe Error]:', err.message);
+                if (!res.headersSent) res.status(500).send('Stream error');
+            });
         });
-        
-        // إجبار المتصفح على التعرف على المحتوى كـ Partial Content في حالة الـ Range
-        res.status(response.status);
 
-        // ضخ الداتا (Stream) مباشرة للمتصفح أولاً بأول (Real-time chunks)
-        response.data.pipe(res);
-
-        response.data.on('error', (err) => {
-            console.error('[Stream Pipe Error]:', err.message);
-            if (!res.headersSent) res.status(500).send('Stream reading error');
+        proxyReq.on('error', (err) => {
+            console.error('[Stream Request Error]:', err.message);
+            if (!res.headersSent) res.status(500).send('Stream connection error');
         });
 
         req.on('close', () => {
-            if (response.data && typeof response.data.destroy === 'function') {
-                response.data.destroy();
-            }
+            proxyReq.destroy();
         });
 
-    } catch (error) {
-        console.error('[Stream Proxy Error]:', error.message);
-        if (!res.headersSent) {
-            res.status(500).send('Streaming error from server');
-        }
+        proxyReq.end();
     }
+
+    doRequest(streamUrl);
 });
 
 app.all('/api/football/:endpoint', async (req, res) => {
@@ -220,7 +244,7 @@ app.all('/api/football/:endpoint', async (req, res) => {
         const data = await fetchWithFallback(footballApis);
         res.json(data);
     } catch (err) {
-        res.status(500).json({ error: 'Football APIs are currently down' });
+        res.status(500).json({ error: 'Football APIs are currently down'ADIAN' });
     }
 });
 
