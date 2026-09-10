@@ -10,22 +10,11 @@
     <script src="/socket.io/socket.io.js"></script>
     <style>body { font-family: 'Tajawal', sans-serif; }</style>
 </head>
-<body class="bg-white text-slate-100 min-h-screen flex flex-col m-0 p-0 overflow-hidden" id="main-body">
-
-    <div id="security-screen" class="fixed inset-0 bg-white z-50 flex items-center justify-center hidden">
-        <div class="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl w-96 text-center">
-            <div class="text-indigo-500 text-4xl mb-4"><i class="fa-solid fa-lock"></i></div>
-            <h2 class="text-xl font-bold mb-2 text-white">PIN</h2>
-            <p class="text-slate-400 text-sm mb-6">أدخل رمز المرور</p>
-            <input type="password" id="pin-input" maxlength="4" class="w-full bg-slate-800 border border-slate-700 text-center text-2xl tracking-widest rounded-xl py-3 mb-4 text-white focus:outline-none focus:border-indigo-500" placeholder="••••" onkeypress="handlePinKey(event)">
-            <p id="error-msg" class="text-rose-500 text-xs mb-4 hidden">رمز المرور غير صحيح!</p>
-            <button onclick="verifyPin()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-all">دخول</button>
-        </div>
-    </div>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col m-0 p-0 overflow-hidden" id="main-body">
 
     <div id="esc-screen" class="fixed inset-0 bg-white z-[99999] hidden"></div>
 
-    <div id="app-container" class="flex-1 flex hidden w-full h-screen bg-slate-900">
+    <div id="app-container" class="flex-1 flex w-full h-screen bg-slate-900">
         <aside class="w-64 bg-slate-950 border-l border-slate-800 flex flex-col justify-between p-4">
             <div>
                 <div class="flex items-center justify-between mb-8 px-2">
@@ -57,7 +46,6 @@
                 <div class="mb-6 flex flex-col sm:flex-row gap-2 max-w-3xl mx-auto">
                     <input type="text" id="yt-link-input" placeholder="أدخل رابط الميديا (يوتيوب وغيرها)..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500">
                     
-                    <!-- قائمة اختيار الجودة، الخيار الافتراضي هو 480p -->
                     <select id="yt-quality-select" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 cursor-pointer text-sm font-medium">
                         <option value="360">360p</option>
                         <option value="480" selected>480p (افتراضي)</option>
@@ -87,7 +75,6 @@
     </div>
 
     <script>
-        let aPressCount = 0;
         let isEscActive = false;
 
         window.addEventListener('keydown', (e) => {
@@ -102,35 +89,8 @@
                 } else {
                     escScreen.classList.add('hidden');
                 }
-                return;
-            }
-
-            if (e.key.toLowerCase() === 'a') {
-                aPressCount++;
-                if (aPressCount >= 5) {
-                    aPressCount = 0;
-                    document.getElementById('security-screen').classList.remove('hidden');
-                    document.getElementById('pin-input').focus();
-                }
-            } else {
-                aPressCount = 0;
             }
         });
-
-        function verifyPin() {
-            const pin = document.getElementById('pin-input').value;
-            if (pin === atob('MTAxMA==')) {
-                document.getElementById('security-screen').classList.add('hidden');
-                document.getElementById('app-container').classList.remove('hidden');
-                document.getElementById('main-body').style.backgroundColor = '#0f172a';
-            } else {
-                document.getElementById('error-msg').classList.remove('hidden');
-            }
-        }
-
-        function handlePinKey(e) {
-            if (e.key === 'Enter') verifyPin();
-        }
 
         const socket = io();
         let username = localStorage.getItem('escapped_username') || 'User_YHCW';
