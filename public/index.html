@@ -48,11 +48,10 @@
                 </nav>
             </div>
             
-            <!-- معلومات المستخدم وعداد المتصلين -->
             <div class="border-t border-slate-800/60 pt-4 space-y-3">
                 <div class="flex items-center justify-between text-xs text-slate-400 px-1">
                     <span>المستخدم:</span>
-                    <button onclick="changeUsername()" id="current-username-display" class="text-indigo-400 font-bold hover:underline">تعديل الاسم</button>
+                    <button onclick="changeUsername()" id="current-username-display" class="text-indigo-400 font-bold hover:underline">User_YHCW</button>
                 </div>
                 <div class="text-xs text-slate-500 text-center bg-slate-900 py-2 rounded-lg border border-slate-800">
                     المتصلين الآن (<span id="online-count-display">0</span>)
@@ -64,27 +63,18 @@
         <main class="flex-1 p-8 overflow-y-auto">
             <div id="tab-youtube" class="tab-content">
                 <h2 class="text-2xl font-bold mb-6">محتوى اليوتيوب</h2>
-                <div id="youtube-feed" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <p class="text-slate-500">جاري التحميل...</p>
-                </div>
+                <div id="youtube-feed" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
             </div>
             <div id="tab-tiktok" class="tab-content hidden">
                 <h2 class="text-2xl font-bold mb-6">محتوى تيك توك</h2>
-                <div id="tiktok-feed" class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <p class="text-slate-500">لا توجد نتائج متاحة حالياً.</p>
-                </div>
+                <div id="tiktok-feed" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
             </div>
             <div id="tab-matches" class="tab-content hidden">
                 <h2 class="text-2xl font-bold mb-6">جدول المباريات</h2>
-                <div id="matches-feed" class="space-y-4">
-                    <p class="text-slate-500">لم يتم العثور على مباريات.</p>
-                </div>
+                <div id="matches-feed" class="space-y-4"></div>
             </div>
             <div id="tab-chat" class="tab-content hidden h-[calc(100vh-8rem)] flex flex-col bg-slate-950 rounded-2xl border border-slate-800">
-                <div class="p-4 border-b border-slate-800 font-bold flex justify-between items-center">
-                    <span>غرفة المحادثة المباشرة</span>
-                    <span id="socket-status" class="text-xs text-emerald-400">متصل</span>
-                </div>
+                <div class="p-4 border-b border-slate-800 font-bold">غرفة المحادثة المباشرة</div>
                 <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3"></div>
                 <div class="p-4 border-t border-slate-800 flex gap-2">
                     <input type="text" id="chat-input" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500" placeholder="اكتب رسالتك هنا..." onkeypress="handleChatKeyPress(event)">
@@ -97,35 +87,27 @@
     <script>
         const socket = io();
 
-        // إدارة اسم المستخدم وتجنب الـ undefined
-        let username = localStorage.getItem('escapped_username');
-        if (!username) {
-            username = 'User_' + Math.random().toString(36).substring(2, 6);
-            localStorage.setItem('escapped_username', username);
-        }
-        
-        window.addEventListener('DOMContentLoaded', () => {
-            const display = document.getElementById('current-username-display');
-            if (display) display.innerText = username;
-        });
+        // نظام تخزين واسم المستخدم
+        let username = localStorage.getItem('escapped_username') || 'User_YHCW';
+        document.getElementById('current-username-display').innerText = username;
 
         function changeUsername() {
-            const newName = prompt("أدخل اسم المستخدم الجديد:", username);
-            if (newName && newName.trim() !== "") {
+            const newName = prompt("تغيير اسم المستخدم:", username);
+            if (newName && newName.trim()) {
                 username = newName.trim();
                 localStorage.setItem('escapped_username', username);
                 document.getElementById('current-username-display').innerText = username;
             }
         }
 
-        // نظام الضغط على حرف A 5 مرات وتبييض الشاشة
+        // نظام الضغط على حرف A 5 مرات وتبييض الشاشة الأصلي
         let aPressCount = 0;
         window.addEventListener('keydown', (e) => {
             if (e.key.toLowerCase() === 'a') {
                 aPressCount++;
                 if (aPressCount >= 5) {
                     document.body.style.backgroundColor = '#ffffff';
-                    document.body.innerHTML = '<div style="color:black;display:flex;justify-content:center;align-items:center;height:100vh;font-size:24px;">تم تفعيل وضع الشاشة البيضاء الطارئ</div>';
+                    document.body.innerHTML = '';
                 }
             } else {
                 aPressCount = 0;
@@ -137,7 +119,7 @@
             if (pin === "1010") {
                 document.getElementById('security-screen').classList.add('hidden');
                 document.getElementById('app-container').classList.remove('hidden');
-                initAppData();
+                loadInitialData();
             } else {
                 document.getElementById('error-msg').classList.remove('hidden');
             }
@@ -153,39 +135,19 @@
             }
         }
 
-        // جلب البيانات من الـ API مع معالجة الأخطاء لمنع ظهور "لم يتم العثور على نتائج" وهمية
-        function initAppData() {
+        function loadInitialData() {
             fetch('/api/youtube')
-                .then(res => {
-                    const contentType = res.headers.get("content-type");
-                    if (contentType && contentType.includes("application/json")) {
-                        return res.json();
-                    }
-                    throw new Error("Invalid JSON");
-                })
-                .then(data => {
-                    const container = document.getElementById('youtube-feed');
-                    if (data && data.length > 0) {
-                        container.innerHTML = data.map(item => `<div class="bg-slate-950 p-4 rounded-xl border border-slate-800">${item.title || 'فيديو'}</div>`).join('');
-                    } else {
-                        container.innerHTML = '<p class="text-slate-500">لا توجد فيديوهات متاحة حالياً.</p>';
-                    }
-                })
-                .catch(() => {
-                    // في حال كان الـ API غير مفعل أو مساره مختلف، نعرض رسالة مناسبة بدلاً من كسر الصفحة
-                    document.getElementById('youtube-feed').innerHTML = '<p class="text-slate-500">لم يتم العثور على نتائج.</p>';
-                });
+                .then(res => res.json())
+                .catch(() => {});
         }
 
-        // تحديث عداد المتصلين عبر الـ Socket
         socket.on('online-count', (count) => {
-            const counter = document.getElementById('online-count-display');
-            if (counter) counter.innerText = count;
+            const el = document.getElementById('online-count-display');
+            if (el) el.innerText = count;
         });
 
-        // نظام الشات
         socket.on('chat-message', (data) => {
-            appendMessage(data.user || 'مجهول', data.text || '');
+            appendMessage(data.user || 'User_YHCW', data.text || '');
         });
 
         function sendChatMessage() {
