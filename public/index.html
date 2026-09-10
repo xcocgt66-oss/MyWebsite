@@ -64,7 +64,7 @@
         <!-- المحتوى الرئيسي -->
         <main class="flex-1 p-8 overflow-y-auto">
             
-            <!-- 1. يوتيوب (عبر الـ API مباشرة لتجاوز الحظر وبأعلى جودة Stream) -->
+            <!-- 1. يوتيوب (عبر الـ API للتجاوز) -->
             <div id="tab-youtube" class="tab-content">
                 <h2 class="text-2xl font-bold mb-6">مشغل يوتيوب (عبر الـ API)</h2>
                 <div class="mb-6 flex gap-2">
@@ -72,11 +72,11 @@
                     <button onclick="streamYoutubeVideoViaAPI()" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-white font-medium">تشغيل عبر الـ API</button>
                 </div>
                 <div id="youtube-feed" class="grid grid-cols-1 gap-6">
-                    <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-slate-500">أدخل الرابط بالأعلى لبدء جلب وتشغيل البث عبر الـ API المخصص.</div>
+                    <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-slate-500">أدخل الرابط بالأعلى لبدء التشغيل بجودة عالية.</div>
                 </div>
             </div>
 
-            <!-- 2. تيك توك (بحث، سكرول، وزر الاكسبلور) -->
+            <!-- 2. تيك توك (بحث، سكرول، واكسبلور) -->
             <div id="tab-tiktok" class="tab-content hidden">
                 <h2 class="text-2xl font-bold mb-6">محتوى تيك توك (Streaming Scroll)</h2>
                 <div class="mb-6 flex flex-wrap gap-2">
@@ -89,11 +89,11 @@
                 </div>
             </div>
 
-            <!-- 3. المباريات (Betfair & Diamond API الحقيقي) -->
+            <!-- 3. المباريات (Free API Live Football Data المضمون) -->
             <div id="tab-matches" class="tab-content hidden">
-                <h2 class="text-2xl font-bold mb-6">جدول المباريات (Betfair & Diamond API)</h2>
+                <h2 class="text-2xl font-bold mb-6">جدول المباريات الحية والقادمة</h2>
                 <div id="matches-feed" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <p class="text-slate-500">جاري جلب المباريات الحقيقية من السيرفر...</p>
+                    <p class="text-slate-500">جاري جلب المباريات من الـ API المضمون...</p>
                 </div>
             </div>
 
@@ -176,7 +176,7 @@
             }
         }
 
-        // تشغيل يوتيوب عبر الـ API خصيصاً لوجود حظر
+        // تشغيل يوتيوب عبر الـ API
         function streamYoutubeVideoViaAPI() {
             const input = document.getElementById('yt-link-input');
             const url = input.value.trim();
@@ -188,22 +188,22 @@
             } else if (url.includes('watch?v=')) {
                 videoId = url.split('watch?v=')[1].split('&')[0];
             } else {
-                videoId = url; // في حال كتب المعرف مباشرة
+                videoId = url;
             }
 
             const container = document.getElementById('youtube-feed');
             container.innerHTML = `
                 <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex flex-col items-center gap-3">
-                    <p class="text-xs text-emerald-400">تم جلب المقطع وتجاوز الحظر عبر الـ API بجودة فائقة (HD)</p>
+                    <p class="text-xs text-emerald-400">تم جلب البث بجودة عالية (HD)</p>
                     <div class="aspect-video w-full rounded-xl overflow-hidden shadow-lg bg-black">
-                        <iframe class="w-full h-full" src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&vq=hd1080&enablejsapi=1" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                        <iframe class="w-full h-full" src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&vq=hd1080" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
                     </div>
                 </div>
             `;
             input.value = '';
         }
 
-        // تيك توك (بحث واكسبلور مع سكرول Streaming)
+        // تيك توك
         function searchTikTokVideos() {
             const query = document.getElementById('tt-search-input').value.trim() || 'cat';
             const container = document.getElementById('tiktok-feed');
@@ -244,7 +244,7 @@
                         <div class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center font-bold text-cyan-400">TT</div>
                         <div>
                             <p class="font-bold text-sm text-white">${video.author?.nickname || video.title || 'مقطع تيك توك'}</p>
-                            <span class="text-xs text-slate-500">بث مباشر عالي الجودة</span>
+                            <span class="text-xs text-slate-500">بث عالي الجودة</span>
                         </div>
                     </div>
                     <p class="text-sm text-slate-300">${video.desc || video.title || ''}</p>
@@ -255,36 +255,46 @@
             `).join('');
         }
 
-        // المباريات الحقيقية عبر الـ API
+        // عرض المباريات الحقيقية
         function loadMatches() {
             const container = document.getElementById('matches-feed');
             fetch('/api/matches')
                 .then(res => res.json())
                 .then(data => {
-                    const matches = Array.isArray(data) ? data : (data.result || []);
-                    if (matches.length === 0) {
-                        container.innerHTML = '<p class="text-slate-500">لا توجد مباريات متاحة في الـ API حالياً.</p>';
+                    // استخراج المباريات بناءً على هيكلة الـ API الجديد
+                    const matchesList = data.response || data.matches || data.data || (Array.isArray(data) ? data : []);
+                    
+                    if (matchesList.length === 0) {
+                        container.innerHTML = '<p class="text-slate-500">لا توجد مباريات متاحة حالياً في الـ API.</p>';
                         return;
                     }
 
-                    container.innerHTML = matches.map(m => `
-                        <div class="bg-slate-950 p-5 rounded-2xl border border-slate-800 flex flex-col justify-between gap-4">
-                            <div class="flex justify-between items-center">
-                                <span class="text-xs px-2.5 py-1 rounded-full font-bold bg-slate-800 text-slate-400">
-                                    ${m.eventName || m.name || 'مباراة رياضية'}
-                                </span>
-                                <span class="text-xs text-indigo-400">${m.marketName || 'Betfair API'}</span>
+                    container.innerHTML = matchesList.map(m => {
+                        const home = m.teams?.home?.name || m.homeTeam || 'المضيف';
+                        const away = m.teams?.away?.name || m.awayTeam || 'الضيف';
+                        const status = m.status?.short || m.status || 'UPCOMING';
+                        const isLive = status === 'LIVE' || status === '1H' || status === '2H';
+                        const time = m.fixture?.date || m.time || 'قريباً';
+
+                        return `
+                            <div class="bg-slate-950 p-5 rounded-2xl border border-slate-800 flex flex-col justify-between gap-4">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs px-2.5 py-1 rounded-full font-bold ${isLive ? 'bg-rose-500/20 text-rose-400 animate-pulse' : 'bg-slate-800 text-slate-400'}">
+                                        ${isLive ? '🔴 مباشر الآن' : '⏳ قادمة / منتهية'}
+                                    </span>
+                                    <span class="text-xs text-slate-400">${m.league?.name || 'مباراة رسمية'}</span>
+                                </div>
+                                <div class="text-center font-black text-base text-white my-2">${home} vs ${away}</div>
+                                <div class="flex justify-between items-center text-sm border-t border-slate-800/80 pt-3">
+                                    <span class="text-slate-400 text-xs">${time}</span>
+                                    ${isLive ? `<button onclick="openLiveStream('${home} vs ${away}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded-xl font-bold transition-all text-xs flex items-center gap-1.5"><i class="fa-solid fa-play"></i> مشاهدة البث (HD)</button>` : `<span class="text-xs text-slate-500">غير مباشر</span>`}
+                                </div>
                             </div>
-                            <div class="text-center font-black text-base text-white my-2">${m.competitionName || 'بطولة رسمية'}</div>
-                            <div class="flex justify-between items-center text-sm border-t border-slate-800/80 pt-3">
-                                <span class="text-slate-400 text-xs">معرف الحدث: ${m.id || m.eventId || 'غير متوفر'}</span>
-                                <button onclick="openLiveStream('${m.eventName || m.name || 'مباراة'}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded-xl font-bold transition-all text-xs flex items-center gap-1.5"><i class="fa-solid fa-play"></i> مشاهدة البث (HD)</button>
-                            </div>
-                        </div>
-                    `).join('');
+                        `;
+                    }).join('');
                 })
                 .catch(() => {
-                    container.innerHTML = '<p class="text-rose-500">تعذر جلب بيانات المباريات من الـ API.</p>';
+                    container.innerHTML = '<p class="text-rose-500">تعذر جلب بيانات المباريات.</p>';
                 });
         }
 
@@ -302,7 +312,7 @@
                     <div class="w-full h-full flex flex-col items-center justify-center bg-slate-950 text-slate-300 rounded-xl">
                         <i class="fa-solid fa-tv text-4xl text-emerald-500 mb-2"></i>
                         <p class="font-bold">البث المباشر يعمل بأعلى جودة (HD Stream)</p>
-                        <span class="text-xs text-slate-500 mt-1">متصل بـ Betfair & Diamond Sports API</span>
+                        <span class="text-xs text-slate-500 mt-1">متصل بـ Free API Live Football Data</span>
                     </div>
                 `;
             }, 1200);
