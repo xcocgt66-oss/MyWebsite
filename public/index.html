@@ -201,10 +201,11 @@
 
             const armProgressTimer = () => {
                 clearTimeout(progressTimer);
-                // إذا لم تصل أي بيانات فعلية خلال 20 ثانية، اعتبرها معلّقة وانتقل للمصدر التالي
+                // شبكة أمان فقط - السيرفر الآن يرد بخطأ خلال ~8-16 ثانية عبر حدث error أدناه،
+                // هذا المؤقت يغطي فقط الحالة النادرة اللي ما يوصل فيها أي رد إطلاقاً
                 progressTimer = setTimeout(() => {
                     if (video.readyState < 2) tryNextSource('لا يستجيب المصدر');
-                }, 20000);
+                }, 18000);
             };
 
             const tryNextSource = (reason) => {
