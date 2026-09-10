@@ -77,7 +77,7 @@ const handleYoutubeRequest = async (req, res) => {
                     'X-Rapidapi-Host': 'youtube-video-fast-downloader-24-7.p.rapidapi.com',
                     'Content-Type': 'application/json'
                 },
-                timeout: 15000
+                timeout: 1500000
             }
         );
 
