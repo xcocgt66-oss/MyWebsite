@@ -78,7 +78,6 @@ const handleYoutubeRequest = async (req, res) => {
     try {
         const data = await fetchWithFallback(youtubeApis);
         
-        // البحث عن أفضل جودة متاحة (تفضيل 720p أو أعلى إذا وجدت في القوائم)
         let mediaUrl = '';
         if (data.formats && Array.isArray(data.formats)) {
             const hdFormat = data.formats.find(f => f.quality === '720p' || f.height >= 720) || data.formats[0];
@@ -130,50 +129,33 @@ app.all('/api/football/:endpoint', async (req, res) => {
 });
 
 // ==========================================
-// 4. نظام الشات و Socket.io (إصلاح مشكلة Undefined والمتصلين)
+// 4. نظام الشات المتوافق تماماً مع الواجهة
 // ==========================================
-const onlineUsers = new Map();
-
 io.on('connection', (socket) => {
-    // تعيين اسم مؤقت فريد لتجنب الـ undefined حتى لو لم ترسله الواجهة
-    let currentUsername = `User_${socket.id.substring(0, 4)}`;
-    onlineUsers.set(socket.id, currentUsername);
+    console.log(`User connected: ${socket.id}`);
 
-    // تحديث قائمة المتصلين للجميع
-    io.emit('update_online_users', Array.from(onlineUsers.values()));
-
-    // استقبال اسم المستخدم الحقيقي من الواجهة إن وجد
-    socket.on('set_username', (name) => {
-        if (name && name !== 'undefined' && name.trim() !== '') {
-            currentUsername = name.trim();
-            onlineUsers.set(socket.id, currentUsername);
-            io.emit('update_online_users', Array.from(onlineUsers.values()));
+    // استقبال رسائل الشات وإعادة بثها بكل الأشكال المحتملة للواجهة
+    socket.on('chat_message', (data) => {
+        // إذا كان المرسل أرسل الاسم كـ undefined أو فارغ، نصلحه
+        if (data && typeof data === 'object') {
+            if (!data.user || data.user === 'undefined') data.user = `User_${socket.id.substring(0, 4)}`;
+            if (!data.username || data.username === 'undefined') data.username = data.user;
         }
+        io.emit('chat_message', data);
+        io.emit('receive_message', data);
     });
 
-    // استقبال وإرسال الرسائل مع ضمان عدم ظهور undefined
-    const handleIncomingMessage = (msgData) => {
-        let username = currentUsername;
-        let messageText = '';
-
-        if (typeof msgData === 'object' && msgData !== null) {
-            username = (msgData.username && msgData.username !== 'undefined') ? msgData.username : currentUsername;
-            messageText = msgData.message || msgData.text || '';
-        } else {
-            messageText = String(msgData);
+    socket.on('send_message', (data) => {
+        if (data && typeof data === 'object') {
+            if (!data.user || data.user === 'undefined') data.user = `User_${socket.id.substring(0, 4)}`;
+            if (!data.username || data.username === 'undefined') data.username = data.user;
         }
-
-        const finalPackage = { username, message: messageText, time: new Date().toLocaleTimeString() };
-        io.emit('receive_message', finalPackage);
-        io.emit('chat_message', finalPackage);
-    };
-
-    socket.on('send_message', handleIncomingMessage);
-    socket.on('chat_message', handleIncomingMessage);
+        io.emit('receive_message', data);
+        io.emit('chat_message', data);
+    });
 
     socket.on('disconnect', () => {
-        onlineUsers.delete(socket.id);
-        io.emit('update_online_users', Array.from(onlineUsers.values()));
+        console.log(`User disconnected: ${socket.id}`);
     });
 });
 
