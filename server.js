@@ -6,7 +6,6 @@ const { Server } = require('socket.io');
 const path = require('path');
 const cors = require('cors');
 
-// منع السيرفر من الانهيار (Crash) عند حدوث أخطاء غير متوقعة
 process.on('uncaughtException', (err) => {
     console.error('[CRITICAL] Uncaught Exception:', err.message);
 });
@@ -24,8 +23,11 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const RAPID_API_KEY = '515f7a3162mshb63efcc57b50884p106404jsn51481b32a788';
-// مفتاح مخصص لـ youtube-media-downloader.p.rapidapi.com (مؤكد أنه يعمل)
 const YT_MEDIA_DOWNLOADER_KEY = '29d69a66b8mshfb03616392e2290p1d3431jsn75b74534c75b';
+
+// --- نظام الشات (حفظ لمدة 24 ساعة) ---
+const chatHistory = [];
+const CHAT_RETENTION_MS = 24 * 60 * 60 * 1000; // 24 ساعة
 
 async function fetchWithFallback(apiList) {
     for (let i = 0; i < apiList.length; i++) {
@@ -40,7 +42,6 @@ async function fetchWithFallback(apiList) {
 
 const handleTikTokRequest = async (req, res) => {
     let url = req.body.url || req.query.url || req.body.link || req.query.link;
-    
     if (Array.isArray(url)) url = url[0]; 
     if (!url || typeof url !== 'string') return res.status(400).json({ error: 'الرجاء توفير رابط صحيح' });
 
@@ -64,6 +65,7 @@ app.all('/api/download', handleTikTokRequest);
 
 const handleYoutubeRequest = async (req, res) => {
     let url = req.body.url || req.query.url;
+    let requestedQuality = req.body.quality || req.query.quality || '1080';
     
     if (Array.isArray(url)) url = url[0];
     if (!url || typeof url !== 'string') return res.status(400).json({ error: 'الرجاء توفير رابط يوتيوب صحيح' });
@@ -71,46 +73,16 @@ const handleYoutubeRequest = async (req, res) => {
     let videoId = url;
     try {
         if (url.includes('v=')) {
-            const splitV = url.split('v=');
-            if (splitV.length > 1) {
-                videoId = splitV[1].split('&')[0];
-            }
+            videoId = url.split('v=')[1].split('&')[0];
         } else if (url.includes('youtu.be/')) {
-            const splitBe = url.split('youtu.be/');
-            if (splitBe.length > 1) {
-                videoId = splitBe[1].split('?')[0];
-            }
+            videoId = url.split('youtu.be/')[1].split('?')[0];
         } else if (url.includes('shorts/')) {
-            const splitShorts = url.split('shorts/');
-            if (splitShorts.length > 1) {
-                videoId = splitShorts[1].split('?')[0];
-            }
+            videoId = url.split('shorts/')[1].split('?')[0];
         }
     } catch (err) {
         console.error('[Regex/Index Error]', err.message);
     }
 
-    const youtubeApis = [
-        {
-            method: 'GET',
-            url: 'https://youtube-media-downloader.p.rapidapi.com/v2/video/details',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-rapidapi-key': YT_MEDIA_DOWNLOADER_KEY,
-                'x-rapidapi-host': 'youtube-media-downloader.p.rapidapi.com'
-            },
-            params: { videoId: videoId, url: `https://www.youtube.com/watch?v=${videoId}` }
-        },
-        {
-            method: 'GET',
-            url: 'https://yt-api.p.rapidapi.com/dl',
-            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'yt-api.p.rapidapi.com' },
-            params: { id: videoId }
-        }
-    ];
-
-    // بدلاً من التوقف عند أول API ينجح، نجرب كل الـ APIs ونجمع كل الروابط الصالحة
-    // كخيارات احتياطية (fallback) - إذا تعطل أو خُنق الرابط الأول، الواجهة تنتقل تلقائياً للتالي
     const candidates = [];
     let videoTitle = 'YouTube Video';
 
@@ -120,49 +92,84 @@ const handleYoutubeRequest = async (req, res) => {
         }
     };
 
+    // 1. استخدام مسار API الجديد (get_available_quality ثم download_video)
+    try {
+        // ملاحظة: الرابط هنا افتراضي، إذا كان الـ API الجديد له دومين مختلف، عدله في السطرين تحت
+        const qualityRes = await axios.get('https://youtube-media-downloader.p.rapidapi.com/v2/video/details', {
+            headers: { 'X-Rapidapi-Key': YT_MEDIA_DOWNLOADER_KEY, 'X-Rapidapi-Host': 'youtube-media-downloader.p.rapidapi.com' },
+            params: { videoId: videoId }
+        });
+
+        if (qualityRes.data && qualityRes.data.title) videoTitle = qualityRes.data.title;
+
+        // استخراج quality id الخاص بـ 1080p
+        if (qualityRes.data && qualityRes.data.formats) {
+            let formats = qualityRes.data.formats;
+            
+            // محاولة العثور على 1080p
+            let selectedFormat = formats.find(f => f.quality === '1080p' || f.height == 1080) 
+                              || formats.find(f => f.quality === `${requestedQuality}p` || f.height == requestedQuality)
+                              || formats.find(f => f.hasVideo && f.hasAudio);
+
+            if (selectedFormat && selectedFormat.url) {
+                // إذا كان الـ API يرجع الرابط مباشرة
+                pushCandidate(selectedFormat.url);
+            } else if (selectedFormat && selectedFormat.id) {
+                // إذا كان يحتاج خطوة download_video (نفذها هنا)
+                /* 
+                const downloadRes = await axios.get('YOUR_DOWNLOAD_VIDEO_API_URL', {
+                    headers: { 'X-Rapidapi-Key': RAPID_API_KEY },
+                    params: { videoId: videoId, quality_id: selectedFormat.id }
+                });
+                if (downloadRes.data && downloadRes.data.url) pushCandidate(downloadRes.data.url);
+                */
+            }
+        }
+    } catch (err) {
+        console.error('[New API Flow Failed, fallback to old APIs]', err.message);
+    }
+
+    // 2. الفولباك للـ APIs القديمة في حال فشل الجديد أو لم يستخرج رابط
+    const youtubeApis = [
+        {
+            method: 'GET',
+            url: 'https://youtube-media-downloader.p.rapidapi.com/v2/video/details',
+            headers: { 'Content-Type': 'application/json', 'x-rapidapi-key': YT_MEDIA_DOWNLOADER_KEY, 'x-rapidapi-host': 'youtube-media-downloader.p.rapidapi.com' },
+            params: { videoId: videoId }
+        },
+        {
+            method: 'GET',
+            url: 'https://yt-api.p.rapidapi.com/dl',
+            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'yt-api.p.rapidapi.com' },
+            params: { id: videoId }
+        }
+    ];
+
     for (const apiConfig of youtubeApis) {
         try {
             const response = await axios(apiConfig);
             const data = response.data;
-
-            if (data.title && videoTitle === 'YouTube Video') {
-                videoTitle = data.title;
-            }
+            if (data.title && videoTitle === 'YouTube Video') videoTitle = data.title;
 
             if (data.formats && Array.isArray(data.formats)) {
-                // أفضل صيغة (فيديو + صوت مدمج) أولاً
-                const combinedFormat = data.formats.find(f => f.url && f.hasVideo !== false && f.hasAudio !== false) ||
-                                       data.formats.find(f => f.url && f.mimeType && f.mimeType.includes('video/mp4'));
-                pushCandidate(combinedFormat?.url);
+                // فلترة للبحث عن الجودة الأقرب للـ 1080p
+                const targetFmt = data.formats.find(f => f.height == 1080 && f.hasAudio !== false) || 
+                                  data.formats.find(f => f.hasVideo !== false && f.hasAudio !== false);
+                pushCandidate(targetFmt?.url);
 
-                // أضف صيغ mp4 إضافية كخيارات احتياطية إن وُجدت
-                data.formats
-                    .filter(f => f.url && f.mimeType && f.mimeType.includes('video/mp4'))
-                    .slice(0, 3)
-                    .forEach(f => pushCandidate(f.url));
+                data.formats.filter(f => f.url && f.mimeType && f.mimeType.includes('video/mp4')).slice(0, 3).forEach(f => pushCandidate(f.url));
             }
-
-            if (data.videos && Array.isArray(data.videos.items) && data.videos.items.length > 0) {
+            if (data.videos && Array.isArray(data.videos.items)) {
                 data.videos.items.slice(0, 2).forEach(item => pushCandidate(item?.url || item?.link));
             }
-
             pushCandidate(data.link || data.url || data.download_url);
-        } catch (err) {
-            console.error(`[Error] Endpoint failed: ${apiConfig.url}`, err.message);
-        }
+        } catch (err) {}
     }
 
     if (candidates.length > 0) {
-        return res.json({
-            success: true,
-            url: candidates[0],
-            link: candidates[0],
-            sources: candidates,
-            title: videoTitle
-        });
+        return res.json({ success: true, url: candidates[0], link: candidates[0], sources: candidates, title: videoTitle });
     }
-
-    return res.status(500).json({ success: false, error: 'تعذر استخراج رابط قابل للتشغيل داخل المشغل من أي مصدر.' });
+    return res.status(500).json({ success: false, error: 'تعذر استخراج رابط من أي مصدر.' });
 };
 
 app.all('/api/youtube', handleYoutubeRequest);
@@ -170,14 +177,11 @@ app.all('/api/youtube/play', handleYoutubeRequest);
 app.all('/api/video', handleYoutubeRequest);
 app.all('/api/media', handleYoutubeRequest);
 
-// البروكسي الحقيقي لبث الفيديو أجزاءً بأجزاء (Real-time Chunked Streaming)
+// --- إزالة الـ Timeout وحل مشكلة Aborted ---
 app.get('/api/stream', (req, res) => {
     let streamUrl = req.query.url;
-    
     if (Array.isArray(streamUrl)) streamUrl = streamUrl[0];
-    if (!streamUrl || typeof streamUrl !== 'string') {
-        return res.status(400).send('No video URL provided');
-    }
+    if (!streamUrl || typeof streamUrl !== 'string') return res.status(400).send('No URL provided');
 
     const range = req.headers.range;
 
@@ -196,125 +200,53 @@ app.get('/api/stream', (req, res) => {
             path: parsedUrl.pathname + parsedUrl.search,
             method: 'GET',
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
                 'Accept': '*/*',
-                'Accept-Encoding': 'identity',
                 'Connection': 'keep-alive',
                 'Referer': 'https://www.youtube.com/'
             }
         };
 
-        if (range) {
-            options.headers['Range'] = range;
-        }
-
-        // مهلة زمنية لمنع تعليق الطلب إلى الأبد إذا كان رابط الفيديو "مخنوقاً" (throttled) من طرف يوتيوب
-        // أو لم يستجب مصدر الفيديو إطلاقاً - بدون هذا، المشغل يبقى فارغاً بدون أي خطأ ظاهر
-        // مهم: هذه المهلات أقصر من مهلة الواجهة (20 ثانية) عمداً، حتى يرد السيرفر بخطأ واضح
-        // قبل أن يقطع المتصفح الاتصال من جهته (وإلا تظهر 499 في السجلات بدل خطأ حقيقي)
-        const CONNECT_TIMEOUT_MS = 8000;  // مهلة الاتصال الأولي والحصول على الهيدرز
-        const STALL_TIMEOUT_MS = 8000;    // مهلة إذا توقف تدفق البيانات بعد بدء البث
-
-        const startTime = Date.now();
-        const elapsed = () => `${Date.now() - startTime}ms`;
-        let bytesReceived = 0;
-
-        console.log(`[Stream] بدء الاتصال بـ ${parsedUrl.hostname} (محاولة إعادة توجيه رقم ${redirectCount})`);
-
-        let settled = false;
-        let stallTimer = null;
-
-        const failOnce = (message, status = 502) => {
-            if (settled) return;
-            settled = true;
-            if (stallTimer) clearTimeout(stallTimer);
-            console.error(`[Stream Failure] بعد ${elapsed()} - استُلم ${bytesReceived} بايت - السبب:`, message);
-            if (!res.headersSent) {
-                res.status(status).json({ error: message });
-            } else {
-                res.destroy();
-            }
-        };
-
-        const connectTimer = setTimeout(() => {
-            proxyReq.destroy();
-            failOnce(`انتهت مهلة الاتصال (${CONNECT_TIMEOUT_MS}ms) - لم يرد ${parsedUrl.hostname} بالهيدرز إطلاقاً`, 504);
-        }, CONNECT_TIMEOUT_MS);
-
-        const armStallTimer = () => {
-            if (stallTimer) clearTimeout(stallTimer);
-            stallTimer = setTimeout(() => {
-                proxyReq.destroy();
-                failOnce(`توقف تدفق البيانات لأكثر من ${STALL_TIMEOUT_MS}ms - على الأرجح يوتيوب يخنق الرابط (throttling)`, 504);
-            }, STALL_TIMEOUT_MS);
-        };
+        if (range) options.headers['Range'] = range;
 
         const proxyReq = client.request(options, (proxyRes) => {
-            clearTimeout(connectTimer);
-            console.log(`[Stream] وصلت الهيدرز من ${parsedUrl.hostname} بعد ${elapsed()} - الحالة: ${proxyRes.statusCode} - content-length: ${proxyRes.headers['content-length'] || 'غير معروف'}`);
-            settled = true; // وصلنا للهيدرز بنجاح، أي فشل بعد هذا سيُعالج عبر pipe error فقط
-
             if ([301, 302, 303, 307, 308].includes(proxyRes.statusCode) && proxyRes.headers.location) {
                 proxyRes.resume();
                 let nextUrl = proxyRes.headers.location;
-                if (nextUrl.startsWith('/')) {
-                    nextUrl = `${parsedUrl.protocol}//${parsedUrl.host}${nextUrl}`;
-                }
-                settled = false;
+                if (nextUrl.startsWith('/')) nextUrl = `${parsedUrl.protocol}//${parsedUrl.host}${nextUrl}`;
                 return doRequest(nextUrl, redirectCount + 1);
             }
 
             if (proxyRes.statusCode >= 400) {
                 proxyRes.resume();
-                return failOnce(`مصدر الفيديو رفض الطلب برمز حالة ${proxyRes.statusCode}`, 502);
+                if (!res.headersSent) res.status(proxyRes.statusCode).send('Upstream error');
+                return;
             }
 
-            const headersToForward = ['content-type', 'content-length', 'accept-ranges', 'content-range', 'transfer-encoding'];
-            headersToForward.forEach(h => {
-                if (proxyRes.headers[h]) {
-                    res.setHeader(h, proxyRes.headers[h]);
-                }
-            });
-            // يضمن أن المشغل نفس الصفحة يستطيع قراءة البث حتى لو تغير الأصل لاحقاً
+            const headersToForward = ['content-type', 'content-length', 'accept-ranges', 'content-range'];
+            headersToForward.forEach(h => { if (proxyRes.headers[h]) res.setHeader(h, proxyRes.headers[h]); });
             res.setHeader('Access-Control-Allow-Origin', '*');
-            if (!proxyRes.headers['content-type']) {
-                res.setHeader('content-type', 'video/mp4');
-            }
-
+            
             res.status(proxyRes.statusCode);
-
-            // راقب توقف تدفق البيانات (throttling) - كل جزء بيانات يُعيد ضبط المؤقت
-            armStallTimer();
-            proxyRes.on('data', (chunk) => {
-                bytesReceived += chunk.length;
-                armStallTimer();
-            });
-            proxyRes.on('end', () => {
-                if (stallTimer) clearTimeout(stallTimer);
-                console.log(`[Stream] اكتمل البث من ${parsedUrl.hostname} بعد ${elapsed()} - إجمالي البايتات: ${bytesReceived}`);
-            });
-
             proxyRes.pipe(res);
 
             proxyRes.on('error', (err) => {
-                if (stallTimer) clearTimeout(stallTimer);
-                console.error(`[Stream Pipe Error] بعد ${elapsed()} - استُلم ${bytesReceived} بايت:`, err.message);
-                if (!res.headersSent) res.status(500).send('Stream error');
-                else res.destroy();
+                // إغلاق هادئ بدون انهيار
+                if (!res.headersSent) res.status(500).end();
+                else res.end();
             });
         });
 
         proxyReq.on('error', (err) => {
-            clearTimeout(connectTimer);
-            failOnce(`تعذر الاتصال بمصدر الفيديو: ${err.message}`, 502);
+            if (!res.headersSent) res.status(502).end();
         });
 
+        // حل مشكلة Aborted: عند إغلاق المتصفح نقطع الاتصال بهدوء
         req.on('close', () => {
-            clearTimeout(connectTimer);
-            if (stallTimer) clearTimeout(stallTimer);
-            if (!settled) {
-                console.warn(`[Stream] المتصفح أغلق الاتصال من جهته بعد ${elapsed()} - استُلم ${bytesReceived} بايت فقط (لم يكتمل)`);
-            }
+            proxyReq.destroy();
+        });
+        
+        req.on('error', () => {
             proxyReq.destroy();
         });
 
@@ -324,50 +256,32 @@ app.get('/api/stream', (req, res) => {
     doRequest(streamUrl);
 });
 
-app.all('/api/football/:endpoint', async (req, res) => {
-    const { endpoint } = req.params;
-    const query = req.method === 'POST' ? req.body : req.query;
-
-    const footballApis = [
-        { method: 'GET', url: `https://v3.football.api-sports.io/${endpoint}`, headers: { 'x-apisports-key': 'a0094f3392b248423f5ffb12191f90c0' }, params: query },
-        { method: 'GET', url: `https://free-api-live-football-data.p.rapidapi.com/${endpoint}`, headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'free-api-live-football-data.p.rapidapi.com' }, params: query }
-    ];
-
-    try {
-        const data = await fetchWithFallback(footballApis);
-        res.json(data);
-    } catch (err) {
-        res.status(500).json({ error: 'Football APIs are currently down' });
-    }
-});
-
 io.on('connection', (socket) => {
-    socket.on('send_message', (messageData) => {
-        io.emit('receive_message', messageData);
-    });
+    // إرسال السجل القديم للمتصل الجديد
+    socket.emit('chat_history', chatHistory);
 
     socket.on('chat_message', (msg) => {
+        msg.timestamp = Date.now();
+        chatHistory.push(msg);
+
+        // مسح الرسائل التي مر عليها 24 ساعة
+        const now = Date.now();
+        while (chatHistory.length > 0 && (now - chatHistory[0].timestamp) > CHAT_RETENTION_MS) {
+            chatHistory.shift(); // يحذف أقدم رسالة
+        }
+
         io.emit('chat_message', msg);
     });
 });
 
-app.all('/api/*', (req, res) => {
-    res.status(404).json({ error: `API endpoint not found: ` + req.originalUrl });
-});
+app.all('/api/*', (req, res) => res.status(404).json({ error: `Not found` }));
 
 app.get('*', (req, res) => {
     const indexPath = path.join(__dirname, 'public', 'index.html');
     res.sendFile(indexPath, (err) => {
-        if (err) {
-            console.error('[Error] index.html not found:', err.message);
-            if (!res.headersSent) {
-                res.status(404).send('ملف index.html غير موجود في مجلد public.');
-            }
-        }
+        if (err && !res.headersSent) res.status(404).send('index.html not found');
     });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
