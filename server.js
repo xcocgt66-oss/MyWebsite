@@ -6,6 +6,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 const cors = require('cors');
 
+// منع السيرفر من الانهيار (Crash) عند حدوث أخطاء غير متوقعة
 process.on('uncaughtException', (err) => {
     console.error('[CRITICAL] Uncaught Exception:', err.message);
 });
@@ -65,23 +66,11 @@ app.all('/api/download', handleTikTokRequest);
 
 const handleYoutubeRequest = async (req, res) => {
     let url = req.body.url || req.query.url;
-    let requestedQuality = req.body.quality || req.query.quality || '1080';
+    // تم تغيير الجودة الافتراضية إلى 480
+    let requestedQuality = req.body.quality || req.query.quality || '480';
     
     if (Array.isArray(url)) url = url[0];
     if (!url || typeof url !== 'string') return res.status(400).json({ error: 'الرجاء توفير رابط يوتيوب صحيح' });
-
-    let videoId = url;
-    try {
-        if (url.includes('v=')) {
-            videoId = url.split('v=')[1].split('&')[0];
-        } else if (url.includes('youtu.be/')) {
-            videoId = url.split('youtu.be/')[1].split('?')[0];
-        } else if (url.includes('shorts/')) {
-            videoId = url.split('shorts/')[1].split('?')[0];
-        }
-    } catch (err) {
-        console.error('[Regex/Index Error]', err.message);
-    }
 
     const candidates = [];
     let videoTitle = 'YouTube Video';
@@ -92,78 +81,94 @@ const handleYoutubeRequest = async (req, res) => {
         }
     };
 
-    // 1. استخدام مسار API الجديد (get_available_quality ثم download_video)
+    // 1. Ziyotech API (الأساسي والجديد)
     try {
-        // ملاحظة: الرابط هنا افتراضي، إذا كان الـ API الجديد له دومين مختلف، عدله في السطرين تحت
-        const qualityRes = await axios.get('https://youtube-media-downloader.p.rapidapi.com/v2/video/details', {
-            headers: { 'X-Rapidapi-Key': YT_MEDIA_DOWNLOADER_KEY, 'X-Rapidapi-Host': 'youtube-media-downloader.p.rapidapi.com' },
-            params: { videoId: videoId }
+        const ZIYO_HOST = "ziyotech-youtube-downloader-api.p.rapidapi.com";
+        const headers = { "X-RapidAPI-Key": RAPID_API_KEY, "X-RapidAPI-Host": ZIYO_HOST };
+        
+        let fullUrl = url;
+        // التأكد أن الرابط يبدأ بـ http (لأن بعض الواجهات ترسل ID فقط)
+        if (!fullUrl.startsWith('http')) {
+            fullUrl = `https://www.youtube.com/watch?v=${url}`;
+        }
+
+        let apiRes = await axios.get(`https://${ZIYO_HOST}/rapid/youtube`, {
+            headers: headers,
+            params: { url: fullUrl, type: 'video', quality: requestedQuality }
         });
 
-        if (qualityRes.data && qualityRes.data.title) videoTitle = qualityRes.data.title;
+        let responseData = apiRes.data;
 
-        // استخراج quality id الخاص بـ 1080p
-        if (qualityRes.data && qualityRes.data.formats) {
-            let formats = qualityRes.data.formats;
+        // نظام الـ Polling للفيديوهات الطويلة (ينتظر إذا الحالة processing)
+        let pollAttempts = 0;
+        const MAX_POLLS = 6; // أقصى حد للمحاولات عشان ما يعلق الطلب للأبد
+        
+        while (responseData.status === "processing" && pollAttempts < MAX_POLLS) {
+            console.log(`[Ziyotech API] جاري معالجة الفيديو... المحاولة ${pollAttempts + 1}`);
+            const delay = (responseData.retry_after || 3) * 1000;
+            await new Promise(resolve => setTimeout(resolve, delay));
             
-            // محاولة العثور على 1080p
-            let selectedFormat = formats.find(f => f.quality === '1080p' || f.height == 1080) 
-                              || formats.find(f => f.quality === `${requestedQuality}p` || f.height == requestedQuality)
-                              || formats.find(f => f.hasVideo && f.hasAudio);
-
-            if (selectedFormat && selectedFormat.url) {
-                // إذا كان الـ API يرجع الرابط مباشرة
-                pushCandidate(selectedFormat.url);
-            } else if (selectedFormat && selectedFormat.id) {
-                // إذا كان يحتاج خطوة download_video (نفذها هنا)
-                /* 
-                const downloadRes = await axios.get('YOUR_DOWNLOAD_VIDEO_API_URL', {
-                    headers: { 'X-Rapidapi-Key': RAPID_API_KEY },
-                    params: { videoId: videoId, quality_id: selectedFormat.id }
-                });
-                if (downloadRes.data && downloadRes.data.url) pushCandidate(downloadRes.data.url);
-                */
-            }
+            const pollRes = await axios.get(responseData.poll_url, { headers });
+            responseData = pollRes.data;
+            pollAttempts++;
         }
+
+        if (responseData.success && responseData.status === "ready" && responseData.medias && responseData.medias.length > 0) {
+            if (responseData.title) videoTitle = responseData.title;
+            pushCandidate(responseData.medias[0].url);
+        }
+
     } catch (err) {
-        console.error('[New API Flow Failed, fallback to old APIs]', err.message);
+        console.error('[Ziyotech API Failed, fallback to old APIs]', err.response ? err.response.data : err.message);
     }
 
-    // 2. الفولباك للـ APIs القديمة في حال فشل الجديد أو لم يستخرج رابط
-    const youtubeApis = [
-        {
-            method: 'GET',
-            url: 'https://youtube-media-downloader.p.rapidapi.com/v2/video/details',
-            headers: { 'Content-Type': 'application/json', 'x-rapidapi-key': YT_MEDIA_DOWNLOADER_KEY, 'x-rapidapi-host': 'youtube-media-downloader.p.rapidapi.com' },
-            params: { videoId: videoId }
-        },
-        {
-            method: 'GET',
-            url: 'https://yt-api.p.rapidapi.com/dl',
-            headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'yt-api.p.rapidapi.com' },
-            params: { id: videoId }
-        }
-    ];
-
-    for (const apiConfig of youtubeApis) {
+    // 2. الفولباك للـ APIs القديمة في حال فشل الجديد
+    if (candidates.length === 0) {
+        let videoId = url;
         try {
-            const response = await axios(apiConfig);
-            const data = response.data;
-            if (data.title && videoTitle === 'YouTube Video') videoTitle = data.title;
-
-            if (data.formats && Array.isArray(data.formats)) {
-                // فلترة للبحث عن الجودة الأقرب للـ 1080p
-                const targetFmt = data.formats.find(f => f.height == 1080 && f.hasAudio !== false) || 
-                                  data.formats.find(f => f.hasVideo !== false && f.hasAudio !== false);
-                pushCandidate(targetFmt?.url);
-
-                data.formats.filter(f => f.url && f.mimeType && f.mimeType.includes('video/mp4')).slice(0, 3).forEach(f => pushCandidate(f.url));
+            if (url.includes('v=')) {
+                videoId = url.split('v=')[1].split('&')[0];
+            } else if (url.includes('youtu.be/')) {
+                videoId = url.split('youtu.be/')[1].split('?')[0];
+            } else if (url.includes('shorts/')) {
+                videoId = url.split('shorts/')[1].split('?')[0];
             }
-            if (data.videos && Array.isArray(data.videos.items)) {
-                data.videos.items.slice(0, 2).forEach(item => pushCandidate(item?.url || item?.link));
-            }
-            pushCandidate(data.link || data.url || data.download_url);
         } catch (err) {}
+
+        const youtubeApis = [
+            {
+                method: 'GET',
+                url: 'https://youtube-media-downloader.p.rapidapi.com/v2/video/details',
+                headers: { 'Content-Type': 'application/json', 'x-rapidapi-key': YT_MEDIA_DOWNLOADER_KEY, 'x-rapidapi-host': 'youtube-media-downloader.p.rapidapi.com' },
+                params: { videoId: videoId }
+            },
+            {
+                method: 'GET',
+                url: 'https://yt-api.p.rapidapi.com/dl',
+                headers: { 'X-Rapidapi-Key': RAPID_API_KEY, 'X-Rapidapi-Host': 'yt-api.p.rapidapi.com' },
+                params: { id: videoId }
+            }
+        ];
+
+        for (const apiConfig of youtubeApis) {
+            try {
+                const response = await axios(apiConfig);
+                const data = response.data;
+                if (data.title && videoTitle === 'YouTube Video') videoTitle = data.title;
+
+                if (data.formats && Array.isArray(data.formats)) {
+                    const targetFmt = data.formats.find(f => f.height == requestedQuality && f.hasAudio !== false) || 
+                                      data.formats.find(f => f.hasVideo !== false && f.hasAudio !== false);
+                    pushCandidate(targetFmt?.url);
+
+                    data.formats.filter(f => f.url && f.mimeType && f.mimeType.includes('video/mp4')).slice(0, 3).forEach(f => pushCandidate(f.url));
+                }
+                if (data.videos && Array.isArray(data.videos.items)) {
+                    data.videos.items.slice(0, 2).forEach(item => pushCandidate(item?.url || item?.link));
+                }
+                pushCandidate(data.link || data.url || data.download_url);
+            } catch (err) {}
+        }
     }
 
     if (candidates.length > 0) {
