@@ -6,12 +6,11 @@ const { Server } = require('socket.io');
 const path = require('path');
 const cors = require('cors');
 
-// منع السيرفر من الانهيار
 process.on('uncaughtException', (err) => {
     console.error('[CRITICAL] Uncaught Exception:', err.message);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason) => {
     console.error('[CRITICAL] Unhandled Rejection:', reason);
 });
 
@@ -33,20 +32,21 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 
-// APIs من Railway Variables
-const RAPID_API_KEY = process.env.RAPID_API_KEY;
-const YT_MEDIA_DOWNLOADER_KEY = process.env.YT_MEDIA_DOWNLOADER_KEY;
+// API KEYS
+const RAPID_API_KEY = 'ضع_مفتاحك_هنا';
+const YT_MEDIA_DOWNLOADER_KEY = 'ضع_مفتاحك_هنا';
 
 
-// Guacamole config
+// Guacamole
 app.get("/api/config", (req, res) => {
     res.json({
-        guacamoleUrl: process.env.GUACAMOLE_URL || ""
+        guacamoleUrl:
+        "https://a300-84mq.taile627cc.ts.net/guacamole/"
     });
 });
 
 
-// --- نظام الشات ---
+// Chat
 const chatHistory = [];
 const CHAT_RETENTION_MS = 24 * 60 * 60 * 1000;
 
@@ -70,3 +70,60 @@ async function fetchWithFallback(apiList) {
         }
     }
 }
+
+
+// TikTok
+const handleTikTokRequest = async (req, res) => {
+
+    let url =
+    req.body.url ||
+    req.query.url ||
+    req.body.link ||
+    req.query.link;
+
+
+    if (Array.isArray(url))
+        url = url[0];
+
+
+    if (!url)
+        return res.status(400).json({
+            error:'الرجاء توفير رابط صحيح'
+        });
+
+
+    const tiktokApis = [
+        {
+            method:'GET',
+            url:'https://tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com/rich_response/index',
+            headers:{
+                'X-Rapidapi-Key':RAPID_API_KEY,
+                'X-Rapidapi-Host':'tiktok-downloader-download-tiktok-videos-without-watermark.p.rapidapi.com'
+            },
+            params:{url}
+        }
+    ];
+
+
+    try {
+
+        const data = await fetchWithFallback(tiktokApis);
+
+        res.json(data);
+
+
+    } catch(err){
+
+        res.status(500).json({
+            error:'TikTok APIs are currently down'
+        });
+
+    }
+
+};
+
+
+app.all('/api/tiktok/info', handleTikTokRequest);
+app.all('/api/tiktok', handleTikTokRequest);
+app.all('/api/tiktok/play', handleTikTokRequest);
+app.all('/api/download', handleTikTokRequest);
