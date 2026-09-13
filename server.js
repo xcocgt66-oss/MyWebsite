@@ -6,6 +6,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 const cors = require('cors');
 
+
 process.on('uncaughtException', (err) => {
     console.error('[CRITICAL] Uncaught Exception:', err.message);
 });
@@ -127,3 +128,12 @@ app.all('/api/tiktok/info', handleTikTokRequest);
 app.all('/api/tiktok', handleTikTokRequest);
 app.all('/api/tiktok/play', handleTikTokRequest);
 app.all('/api/download', handleTikTokRequest);
+
+
+const PORT = process.env.PORT || 3000;
+
+console.log("ABOUT TO START SERVER ON PORT:", PORT);
+
+server.listen(PORT, "0.0.0.0", () => {
+    console.log("SERVER IS ALIVE ON PORT:", PORT);
+});
