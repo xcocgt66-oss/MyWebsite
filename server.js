@@ -23,8 +23,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const RAPID_API_KEY = '515f7a3162mshb63efcc57b50884p106404jsn51481b32a788';
-const YT_MEDIA_DOWNLOADER_KEY = '29d69a66b8mshfb03616392e2290p1d3431jsn75b74534c75b';
+const RAPID_API_KEY = process.env.RAPID_API_KEY;
+const YT_MEDIA_DOWNLOADER_KEY = process.env.YT_MEDIA_DOWNLOADER_KEY;
 
 // --- نظام الشات (حفظ لمدة 24 ساعة) ---
 const chatHistory = [];
@@ -181,6 +181,12 @@ app.all('/api/youtube', handleYoutubeRequest);
 app.all('/api/youtube/play', handleYoutubeRequest);
 app.all('/api/video', handleYoutubeRequest);
 app.all('/api/media', handleYoutubeRequest);
+
+app.get("/api/config", (req,res)=>{
+    res.json({
+        guacamoleUrl: process.env.GUACAMOLE_URL
+    });
+});
 
 // --- إزالة الـ Timeout وحل مشكلة Aborted ---
 app.get('/api/stream', (req, res) => {
