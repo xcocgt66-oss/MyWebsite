@@ -1,3 +1,291 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blank</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>body { font-family: 'Tajawal', sans-serif; }</style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col m-0 p-0 overflow-hidden" id="main-body">
+
+    <div id="esc-screen" class="fixed inset-0 bg-white z-[99999] hidden"></div>
+    <div id="lock-screen" class="fixed inset-0 bg-white z-[999998]"></div>
+    
+    <div id="pin-popup" class="fixed inset-0 z-[999999] flex items-center justify-center bg-black/40">
+        <div class="bg-white rounded-2xl p-6 w-72 text-center shadow-xl">
+            <h2 class="text-lg font-bold text-slate-800 mb-1">PIN</h2>
+            <p id="pin-error-msg" class="text-sm text-slate-500 mb-4">%u0627%u062F%u062E%u0644 %u0643%u0644%u0645%u0629 %u0627%u0644%u0645%u0631%u0648%u0631</p>
+            <input id="pin-input" type="password" inputmode="numeric" maxlength="10" class="w-full text-center text-xl tracking-widest border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:border-indigo-500 mb-3">
+            <button id="pin-submit" type="button" onclick="checkPin()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded-xl transition-all">%u062F%u062E%u0648%u0644</button>
+        </div>
+    </div>
+
+    <div id="app-container" class="hidden flex-1 w-full h-screen bg-slate-900">
+        <aside class="w-64 bg-slate-950 border-l border-slate-800 flex flex-col justify-between p-4">
+            <div>
+                <div class="flex items-center justify-between mb-8 px-2">
+                    <h1 class="text-xl font-black text-indigo-400">%u0627%u0644%u0645%u0648%u0642%u0639</h1>
+                    <span class="flex h-3 w-3 relative">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                    </span>
+                </div>
+                <nav class="space-y-2">
+                    <button onclick="switchTab('youtube')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-800 transition-all font-medium bg-slate-800 text-white"><i class="fa-solid fa-play text-rose-500"></i> %u064A%u0648%u062A%u064A%u0648%u0628</button>
+                    <button onclick="switchTab('chat')" class="nav-btn w-full flex items-center justify-between px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-800 transition-all font-medium">
+                        <span class="flex items-center gap-3"><i class="fa-solid fa-comments text-amber-500"></i> %u0627%u0644%u0634%u0627%u062A</span>
+                    </button>
+                <button onclick="switchTab('remote')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-800 transition-all font-medium">
+<i class="fa-solid fa-desktop text-cyan-400"></i> التحكم عن بعد
+</button>
+</nav>
+            </div>
+            
+            <div class="border-t border-slate-800/60 pt-4 space-y-3">
+                <div class="flex items-center justify-between text-xs text-slate-400 px-1">
+                    <span>%u0627%u0644%u0645%u0633%u062A%u062E%u062F%u0645:</span>
+                    <button onclick="changeUsername()" id="current-username-display" class="text-indigo-400 font-bold hover:underline">%u0632%u0627%u0626%u0631</button>
+                </div>
+            </div>
+        </aside>
+
+        <main class="flex-1 p-8 overflow-y-auto">
+            <div id="tab-youtube" class="tab-content">
+                <h2 class="text-2xl font-bold mb-6 text-white text-center">Direct Youtube API Player</h2>
+                <div class="mb-6 flex flex-col sm:flex-row gap-2 max-w-3xl mx-auto">
+                    <input type="text" id="yt-link-input" placeholder="%u0627%u062F%u062E%u0644 %u0631%u0627%u0628%u0637 %u064A%u0648%u062A%u064A%u0648%u0628" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500">
+                    
+                    <select id="yt-quality-select" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 cursor-pointer text-sm font-medium">
+                        <option value="360">360p</option>
+                        <option value="480" selected>480p (%u0627%u0641%u062A%u0631%u0627%u0636%u064A)</option>
+                        <option value="720">720p (HD)</option>
+                        <option value="1080">1080p (FHD)</option>
+                    </select>
+
+                    <button onclick="fetchAndPlayMedia()" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-white font-medium">%u062A%u0634%u063A%u064A%u0644</button>
+                </div>
+                <div id="media-feed" class="w-full flex justify-center">
+                    <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-slate-500 max-w-3xl w-full">%u0627%u062F%u062E%u0644 %u0631%u0627%u0628%u0637 %u064A%u0648%u062A%u064A%u0648%u0628 %u0644%u062A%u0634%u063A%u064A%u0644%u0647.</div>
+                </div>
+            </div>
+
+            <div id="tab-chat" class="tab-content hidden h-[calc(100vh-8rem)] flex flex-col bg-slate-950 rounded-2xl border border-slate-800">
+                <div class="p-4 border-b border-slate-800 font-bold flex justify-between items-center text-white">
+                    <span>%u063A%u0631%u0641%u0629 %u0627%u0644%u0645%u062D%u0627%u062F%u062B%u0629 %u0627%u0644%u0645%u0628%u0627%u0634%u0631%u0629</span>
+                    <span class="text-xs text-emerald-400">%u0645%u062A%u0635%u0644</span>
+                </div>
+                <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3"></div>
+                <div class="p-4 border-t border-slate-800 flex gap-2">
+                    <input type="text" id="chat-input" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500" placeholder="%u0627%u0643%u062A%u0628 %u0631%u0633%u0627%u0644%u062A%u0643 %u0647%u0646%u0627..." onkeypress="handleChatKeyPress(event)">
+                    <button onclick="sendChatMessage()" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-white font-medium transition-all">%u0625%u0631%u0633%u0627%u0644</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="tab-remote" class="tab-content hidden h-[calc(100vh-8rem)] flex flex-col bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden">
+<div class="p-3 border-b border-slate-800 flex justify-between items-center">
+<span class="text-white font-bold"><i class="fa-solid fa-desktop text-cyan-400"></i> Remote Desktop</span>
+<button onclick="openGuacFullscreen()" class="bg-cyan-600 px-4 py-2 rounded-xl text-white font-bold">
+⛶ Full Screen
+</button>
+</div>
+<iframe id="guac-frame" class="flex-1 w-full border-0" allow="fullscreen"></iframe>
+</div>
+
 <script>
-document.write(unescape('%3C%21DOCTYPE%20html%3E%0D%0A%3Chtml%20lang%3D%22ar%22%20dir%3D%22rtl%22%3E%0D%0A%3Chead%3E%0D%0A%20%20%20%20%3Cmeta%20charset%3D%22UTF-8%22%3E%0D%0A%20%20%20%20%3Cmeta%20name%3D%22viewport%22%20content%3D%22width%3Ddevice-width%2C%20initial-scale%3D1.0%22%3E%0D%0A%20%20%20%20%3Ctitle%3EBlank%3C/title%3E%0D%0A%20%20%20%20%3Cscript%20src%3D%22https%3A//cdn.tailwindcss.com%22%3E%3C/script%3E%0D%0A%20%20%20%20%3Clink%20rel%3D%22stylesheet%22%20href%3D%22https%3A//cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css%22%3E%0D%0A%20%20%20%20%3Clink%20href%3D%22https%3A//fonts.googleapis.com/css2%3Ffamily%3DTajawal%3Awght@400%3B500%3B700%3B900%26display%3Dswap%22%20rel%3D%22stylesheet%22%3E%0D%0A%20%20%20%20%3Cscript%20src%3D%22/socket.io/socket.io.js%22%3E%3C/script%3E%0D%0A%20%20%20%20%3Cstyle%3Ebody%20%7B%20font-family%3A%20%27Tajawal%27%2C%20sans-serif%3B%20%7D%3C/style%3E%0D%0A%3C/head%3E%0D%0A%3Cbody%20class%3D%22bg-slate-900%20text-slate-100%20min-h-screen%20flex%20flex-col%20m-0%20p-0%20overflow-hidden%22%20id%3D%22main-body%22%3E%0D%0A%0D%0A%20%20%20%20%3Cdiv%20id%3D%22esc-screen%22%20class%3D%22fixed%20inset-0%20bg-white%20z-%5B99999%5D%20hidden%22%3E%3C/div%3E%0D%0A%20%20%20%20%3Cdiv%20id%3D%22lock-screen%22%20class%3D%22fixed%20inset-0%20bg-white%20z-%5B999998%5D%22%3E%3C/div%3E%0D%0A%20%20%20%20%0D%0A%20%20%20%20%3Cdiv%20id%3D%22pin-popup%22%20class%3D%22fixed%20inset-0%20z-%5B999999%5D%20flex%20items-center%20justify-center%20bg-black/40%22%3E%0D%0A%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22bg-white%20rounded-2xl%20p-6%20w-72%20text-center%20shadow-xl%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Ch2%20class%3D%22text-lg%20font-bold%20text-slate-800%20mb-1%22%3EPIN%3C/h2%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cp%20id%3D%22pin-error-msg%22%20class%3D%22text-sm%20text-slate-500%20mb-4%22%3E%u0627%u062F%u062E%u0644%20%u0643%u0644%u0645%u0629%20%u0627%u0644%u0645%u0631%u0648%u0631%3C/p%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cinput%20id%3D%22pin-input%22%20type%3D%22password%22%20inputmode%3D%22numeric%22%20maxlength%3D%2210%22%20class%3D%22w-full%20text-center%20text-xl%20tracking-widest%20border%20border-slate-300%20rounded-xl%20px-3%20py-2%20text-slate-800%20focus%3Aoutline-none%20focus%3Aborder-indigo-500%20mb-3%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cbutton%20id%3D%22pin-submit%22%20type%3D%22button%22%20onclick%3D%22checkPin%28%29%22%20class%3D%22w-full%20bg-indigo-600%20hover%3Abg-indigo-500%20text-white%20font-bold%20py-2%20rounded-xl%20transition-all%22%3E%u062F%u062E%u0648%u0644%3C/button%3E%0D%0A%20%20%20%20%20%20%20%20%3C/div%3E%0D%0A%20%20%20%20%3C/div%3E%0D%0A%0D%0A%20%20%20%20%3Cdiv%20id%3D%22app-container%22%20class%3D%22hidden%20flex-1%20w-full%20h-screen%20bg-slate-900%22%3E%0D%0A%20%20%20%20%20%20%20%20%3Caside%20class%3D%22w-64%20bg-slate-950%20border-l%20border-slate-800%20flex%20flex-col%20justify-between%20p-4%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22flex%20items-center%20justify-between%20mb-8%20px-2%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Ch1%20class%3D%22text-xl%20font-black%20text-indigo-400%22%3E%u0627%u0644%u0645%u0648%u0642%u0639%3C/h1%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cspan%20class%3D%22flex%20h-3%20w-3%20relative%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cspan%20class%3D%22animate-ping%20absolute%20inline-flex%20h-full%20w-full%20rounded-full%20bg-emerald-400%20opacity-75%22%3E%3C/span%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cspan%20class%3D%22relative%20inline-flex%20rounded-full%20h-3%20w-3%20bg-emerald-500%22%3E%3C/span%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3C/span%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3C/div%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cnav%20class%3D%22space-y-2%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cbutton%20onclick%3D%22switchTab%28%27youtube%27%29%22%20class%3D%22nav-btn%20w-full%20flex%20items-center%20gap-3%20px-4%20py-3%20rounded-xl%20text-slate-300%20hover%3Abg-slate-800%20transition-all%20font-medium%20bg-slate-800%20text-white%22%3E%3Ci%20class%3D%22fa-solid%20fa-play%20text-rose-500%22%3E%3C/i%3E%20%u064A%u0648%u062A%u064A%u0648%u0628%3C/button%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cbutton%20onclick%3D%22switchTab%28%27chat%27%29%22%20class%3D%22nav-btn%20w-full%20flex%20items-center%20justify-between%20px-4%20py-3%20rounded-xl%20text-slate-300%20hover%3Abg-slate-800%20transition-all%20font-medium%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cspan%20class%3D%22flex%20items-center%20gap-3%22%3E%3Ci%20class%3D%22fa-solid%20fa-comments%20text-amber-500%22%3E%3C/i%3E%20%u0627%u0644%u0634%u0627%u062A%3C/span%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3C/button%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3C/nav%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%3C/div%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22border-t%20border-slate-800/60%20pt-4%20space-y-3%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22flex%20items-center%20justify-between%20text-xs%20text-slate-400%20px-1%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cspan%3E%u0627%u0644%u0645%u0633%u062A%u062E%u062F%u0645%3A%3C/span%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cbutton%20onclick%3D%22changeUsername%28%29%22%20id%3D%22current-username-display%22%20class%3D%22text-indigo-400%20font-bold%20hover%3Aunderline%22%3E%u0632%u0627%u0626%u0631%3C/button%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3C/div%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%3C/div%3E%0D%0A%20%20%20%20%20%20%20%20%3C/aside%3E%0D%0A%0D%0A%20%20%20%20%20%20%20%20%3Cmain%20class%3D%22flex-1%20p-8%20overflow-y-auto%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20id%3D%22tab-youtube%22%20class%3D%22tab-content%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Ch2%20class%3D%22text-2xl%20font-bold%20mb-6%20text-white%20text-center%22%3EDirect%20Youtube%20API%20Player%3C/h2%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22mb-6%20flex%20flex-col%20sm%3Aflex-row%20gap-2%20max-w-3xl%20mx-auto%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cinput%20type%3D%22text%22%20id%3D%22yt-link-input%22%20placeholder%3D%22%u0627%u062F%u062E%u0644%20%u0631%u0627%u0628%u0637%20%u064A%u0648%u062A%u064A%u0648%u0628%22%20class%3D%22flex-1%20bg-slate-950%20border%20border-slate-800%20rounded-xl%20px-4%20py-2%20text-white%20focus%3Aoutline-none%20focus%3Aborder-indigo-500%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cselect%20id%3D%22yt-quality-select%22%20class%3D%22bg-slate-950%20border%20border-slate-800%20rounded-xl%20px-3%20py-2%20text-white%20focus%3Aoutline-none%20focus%3Aborder-indigo-500%20cursor-pointer%20text-sm%20font-medium%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Coption%20value%3D%22360%22%3E360p%3C/option%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Coption%20value%3D%22480%22%20selected%3E480p%20%28%u0627%u0641%u062A%u0631%u0627%u0636%u064A%29%3C/option%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Coption%20value%3D%22720%22%3E720p%20%28HD%29%3C/option%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Coption%20value%3D%221080%22%3E1080p%20%28FHD%29%3C/option%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3C/select%3E%0D%0A%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cbutton%20onclick%3D%22fetchAndPlayMedia%28%29%22%20class%3D%22bg-indigo-600%20hover%3Abg-indigo-500%20px-6%20py-2%20rounded-xl%20text-white%20font-medium%22%3E%u062A%u0634%u063A%u064A%u0644%3C/button%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3C/div%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20id%3D%22media-feed%22%20class%3D%22w-full%20flex%20justify-center%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22bg-slate-950%20p-6%20rounded-2xl%20border%20border-slate-800%20text-center%20text-slate-500%20max-w-3xl%20w-full%22%3E%u0627%u062F%u062E%u0644%20%u0631%u0627%u0628%u0637%20%u064A%u0648%u062A%u064A%u0648%u0628%20%u0644%u062A%u0634%u063A%u064A%u0644%u0647.%3C/div%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3C/div%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%3C/div%3E%0D%0A%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20id%3D%22tab-chat%22%20class%3D%22tab-content%20hidden%20h-%5Bcalc%28100vh-8rem%29%5D%20flex%20flex-col%20bg-slate-950%20rounded-2xl%20border%20border-slate-800%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22p-4%20border-b%20border-slate-800%20font-bold%20flex%20justify-between%20items-center%20text-white%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cspan%3E%u063A%u0631%u0641%u0629%20%u0627%u0644%u0645%u062D%u0627%u062F%u062B%u0629%20%u0627%u0644%u0645%u0628%u0627%u0634%u0631%u0629%3C/span%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cspan%20class%3D%22text-xs%20text-emerald-400%22%3E%u0645%u062A%u0635%u0644%3C/span%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3C/div%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20id%3D%22chat-messages%22%20class%3D%22flex-1%20p-4%20overflow-y-auto%20space-y-3%22%3E%3C/div%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22p-4%20border-t%20border-slate-800%20flex%20gap-2%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cinput%20type%3D%22text%22%20id%3D%22chat-input%22%20class%3D%22flex-1%20bg-slate-900%20border%20border-slate-700%20rounded-xl%20px-4%20py-2%20text-white%20focus%3Aoutline-none%20focus%3Aborder-indigo-500%22%20placeholder%3D%22%u0627%u0643%u062A%u0628%20%u0631%u0633%u0627%u0644%u062A%u0643%20%u0647%u0646%u0627...%22%20onkeypress%3D%22handleChatKeyPress%28event%29%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cbutton%20onclick%3D%22sendChatMessage%28%29%22%20class%3D%22bg-indigo-600%20hover%3Abg-indigo-500%20px-6%20py-2%20rounded-xl%20text-white%20font-medium%20transition-all%22%3E%u0625%u0631%u0633%u0627%u0644%3C/button%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3C/div%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%3C/div%3E%0D%0A%20%20%20%20%20%20%20%20%3C/main%3E%0D%0A%20%20%20%20%3C/div%3E%0D%0A%0D%0A%20%20%20%20%3Cscript%3E%0D%0A%20%20%20%20%20%20%20%20const%20lockScreen%20%3D%20document.getElementById%28%27lock-screen%27%29%3B%0D%0A%20%20%20%20%20%20%20%20const%20pinPopup%20%3D%20document.getElementById%28%27pin-popup%27%29%3B%0D%0A%20%20%20%20%20%20%20%20const%20pinInput%20%3D%20document.getElementById%28%27pin-input%27%29%3B%0D%0A%20%20%20%20%20%20%20%20const%20pinErrorMsg%20%3D%20document.getElementById%28%27pin-error-msg%27%29%3B%0D%0A%20%20%20%20%20%20%20%20const%20appContainer%20%3D%20document.getElementById%28%27app-container%27%29%3B%0D%0A%20%20%20%20%20%20%20%20const%20SITE_PIN%20%3D%20%271010%27%3B%0D%0A%20%20%20%20%20%20%20%20let%20unlocked%20%3D%20false%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20pinInput.focus%28%29%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20function%20checkPin%28%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20if%20%28pinInput.value.trim%28%29%20%3D%3D%3D%20SITE_PIN%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20unlockSite%28%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%7D%20else%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20pinInput.value%20%3D%20%27%27%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20pinErrorMsg.innerText%20%3D%20%27%u0643%u0644%u0645%u0629%20%u0627%u0644%u0645%u0631%u0648%u0631%20%u063A%u064A%u0631%20%u0635%u062D%u064A%u062D%u0629%21%27%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20pinErrorMsg.classList.add%28%27text-rose-500%27%2C%20%27font-bold%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20pinInput.focus%28%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%7D%0D%0A%20%20%20%20%20%20%20%20%7D%0D%0A%0D%0A%20%20%20%20%20%20%20%20function%20unlockSite%28%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20unlocked%20%3D%20true%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20lockScreen.classList.add%28%27hidden%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20pinPopup.classList.add%28%27hidden%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20appContainer.classList.remove%28%27hidden%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20appContainer.classList.add%28%27flex%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%7D%0D%0A%0D%0A%20%20%20%20%20%20%20%20pinInput.addEventListener%28%27keydown%27%2C%20%28e%29%20%3D%3E%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20if%20%28e.key%20%3D%3D%3D%20%27Enter%27%29%20checkPin%28%29%3B%0D%0A%20%20%20%20%20%20%20%20%7D%29%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20let%20isEscActive%20%3D%20false%3B%0D%0A%20%20%20%20%20%20%20%20window.addEventListener%28%27keydown%27%2C%20%28e%29%20%3D%3E%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20if%20%28%21unlocked%29%20return%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20if%20%28e.key%20%3D%3D%3D%20%27Escape%27%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20isEscActive%20%3D%20%21isEscActive%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20const%20escScreen%20%3D%20document.getElementById%28%27esc-screen%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20const%20videoPlayer%20%3D%20document.getElementById%28%27native-video-player%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20if%20%28isEscActive%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20escScreen.classList.remove%28%27hidden%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20if%20%28videoPlayer%29%20videoPlayer.pause%28%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%7D%20else%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20escScreen.classList.add%28%27hidden%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%7D%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%7D%0D%0A%20%20%20%20%20%20%20%20%7D%29%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20const%20socket%20%3D%20io%28%29%3B%0D%0A%20%20%20%20%20%20%20%20let%20username%20%3D%20localStorage.getItem%28%27site_username%27%29%20%7C%7C%20%27%u0632%u0627%u0626%u0631%27%3B%0D%0A%20%20%20%20%20%20%20%20document.getElementById%28%27current-username-display%27%29.innerText%20%3D%20username%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20function%20changeUsername%28%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20newName%20%3D%20prompt%28%22%u062A%u063A%u064A%u064A%u0631%20%u0627%u0633%u0645%20%u0627%u0644%u0645%u0633%u062A%u062E%u062F%u0645%3A%22%2C%20username%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20if%20%28newName%20%26%26%20newName.trim%28%29%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20username%20%3D%20newName.trim%28%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20localStorage.setItem%28%27site_username%27%2C%20username%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20document.getElementById%28%27current-username-display%27%29.innerText%20%3D%20username%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%7D%0D%0A%20%20%20%20%20%20%20%20%7D%0D%0A%0D%0A%20%20%20%20%20%20%20%20function%20switchTab%28tabName%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20document.querySelectorAll%28%27.tab-content%27%29.forEach%28el%20%3D%3E%20el.classList.add%28%27hidden%27%29%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20document.getElementById%28%60tab-%24%7BtabName%7D%60%29.classList.remove%28%27hidden%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20document.querySelectorAll%28%27.nav-btn%27%29.forEach%28el%20%3D%3E%20el.classList.remove%28%27bg-slate-800%27%2C%20%27text-white%27%29%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20if%28event%20%26%26%20event.currentTarget%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20event.currentTarget.classList.add%28%27bg-slate-800%27%2C%20%27text-white%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%7D%0D%0A%20%20%20%20%20%20%20%20%7D%0D%0A%0D%0A%20%20%20%20%20%20%20%20async%20function%20fetchAndPlayMedia%28%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20input%20%3D%20document.getElementById%28%27yt-link-input%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20qualitySelect%20%3D%20document.getElementById%28%27yt-quality-select%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20url%20%3D%20input.value.trim%28%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20quality%20%3D%20qualitySelect.value%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20if%28%21url%29%20return%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20container%20%3D%20document.getElementById%28%27media-feed%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20container.innerHTML%20%3D%20%60%3Cdiv%20class%3D%22bg-slate-950%20p-6%20rounded-2xl%20border%20border-slate-800%20text-center%20text-indigo-400%20max-w-3xl%20w-full%22%3E%3Ci%20class%3D%22fa-solid%20fa-spinner%20fa-spin%20text-2xl%20mb-2%22%3E%3C/i%3E%3Cbr%3E%u062C%u0627%u0631%u064A%20%u0627%u0644%u062A%u062D%u0645%u064A%u0644...%3C/div%3E%60%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20try%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20const%20response%20%3D%20await%20fetch%28%27/api/youtube%27%2C%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20method%3A%20%27POST%27%2C%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20headers%3A%20%7B%20%27Content-Type%27%3A%20%27application/json%27%20%7D%2C%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20body%3A%20JSON.stringify%28%7B%20url%3A%20url%2C%20quality%3A%20quality%20%7D%29%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%7D%29%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20const%20data%20%3D%20await%20response.json%28%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20const%20rawSources%20%3D%20%28data.sources%20%26%26%20data.sources.length%20%3F%20data.sources%20%3A%20%28data.url%20%3F%20%5Bdata.url%5D%20%3A%20%5B%5D%29%29%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20if%20%28data.success%20%26%26%20rawSources.length%20%3E%200%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20const%20proxiedSources%20%3D%20rawSources.map%28u%20%3D%3E%20%60/api/stream%3Furl%3D%24%7BencodeURIComponent%28u%29%7D%60%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20renderPlayer%28data.title%20%7C%7C%20%27%u0641%u064A%u062F%u064A%u0648%20%u064A%u0648%u062A%u064A%u0648%u0628%27%2C%20proxiedSources%2C%20quality%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%7D%20else%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20container.innerHTML%20%3D%20%60%3Cdiv%20class%3D%22bg-slate-950%20p-6%20rounded-2xl%20border%20border-slate-800%20text-center%20text-rose-500%20max-w-3xl%20w-full%22%3E%u0641%u0634%u0644%20%u0628%u0633%u0628%u0628%20API%u060C%20%u062A%u0623%u0643%u062F%20%u0625%u0646%20%u0627%u0644%u0631%u0627%u0628%u0637%20%u0631%u0627%u0628%u0637%20%u064A%u0648%u062A%u064A%u0648%u0628%20%u0635%u062D%u064A%u062D.%3C/div%3E%60%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%7D%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%7D%20catch%20%28err%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20container.innerHTML%20%3D%20%60%3Cdiv%20class%3D%22bg-slate-950%20p-6%20rounded-2xl%20border%20border-slate-800%20text-center%20text-rose-500%20max-w-3xl%20w-full%22%3E%u0641%u0634%u0644%20%u0627%u0644%u0627%u062A%u0635%u0627%u0644%u060C%20%u062D%u0627%u0648%u0644%20%u0645%u0631%u0629%20%u062B%u0627%u0646%u064A%u0629.%3C/div%3E%60%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%7D%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20input.value%20%3D%20%27%27%3B%0D%0A%20%20%20%20%20%20%20%20%7D%0D%0A%0D%0A%20%20%20%20%20%20%20%20let%20currentSources%20%3D%20%5B%5D%3B%0D%0A%20%20%20%20%20%20%20%20let%20currentSourceIndex%20%3D%200%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20function%20renderPlayer%28title%2C%20sources%2C%20quality%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20currentSources%20%3D%20sources%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20currentSourceIndex%20%3D%200%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20container%20%3D%20document.getElementById%28%27media-feed%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20container.innerHTML%20%3D%20%60%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22bg-slate-950%20p-4%20rounded-2xl%20border%20border-slate-800%20flex%20flex-col%20items-center%20gap-3%20max-w-3xl%20w-full%20shadow-2xl%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22w-full%20flex%20justify-between%20items-center%20px-2%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Ch3%20class%3D%22text-white%20font-bold%20text-sm%20truncate%20pr-4%22%3E%24%7Btitle%7D%3C/h3%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cspan%20id%3D%22stream-source-badge%22%20class%3D%22text-xs%20text-emerald-400%20whitespace-nowrap%22%3E%3Ci%20class%3D%22fa-brands%20fa-youtube%22%3E%3C/i%3E%20%u064A%u0648%u062A%u064A%u0648%u0628%20%u0645%u0628%u0627%u0634%u0631%20%28%24%7Bquality%7Dp%29%3C/span%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3C/div%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20class%3D%22aspect-video%20w-full%20rounded-xl%20overflow-hidden%20bg-black%20border%20border-slate-800%20relative%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cvideo%20id%3D%22native-video-player%22%20controls%20autoplay%20playsinline%20referrerpolicy%3D%22no-referrer%22%20class%3D%22w-full%20h-full%20outline-none%20object-contain%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Csource%20id%3D%22native-video-source%22%20src%3D%22%24%7Bsources%5B0%5D%7D%22%20type%3D%22video/mp4%22%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3C/video%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3Cdiv%20id%3D%22video-error-overlay%22%20class%3D%22hidden%20absolute%20inset-0%20bg-black/80%20flex%20items-center%20justify-center%20text-center%20text-rose-400%20text-sm%20p-4%22%3E%3C/div%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3C/div%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%3C/div%3E%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%60%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20setupVideoDiagnostics%28%29%3B%0D%0A%20%20%20%20%20%20%20%20%7D%0D%0A%0D%0A%20%20%20%20%20%20%20%20function%20setupVideoDiagnostics%28%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20video%20%3D%20document.getElementById%28%27native-video-player%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20overlay%20%3D%20document.getElementById%28%27video-error-overlay%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20if%20%28%21video%20%7C%7C%20%21overlay%29%20return%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20showOverlay%20%3D%20%28message%29%20%3D%3E%20%7B%20overlay.innerText%20%3D%20message%3B%20overlay.classList.remove%28%27hidden%27%29%3B%20%7D%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20hideOverlay%20%3D%20%28%29%20%3D%3E%20overlay.classList.add%28%27hidden%27%29%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20tryNextSource%20%3D%20%28%29%20%3D%3E%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20if%20%28currentSourceIndex%20%3C%20currentSources.length%20-%201%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20currentSourceIndex++%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20showOverlay%28%27%u0641%u0634%u0644%20%u0627%u0644%u062A%u062D%u0645%u064A%u0644%u060C%20%u062C%u0627%u0631%u064A%20%u0625%u0639%u0627%u062F%u0629%20%u0627%u0644%u0645%u062D%u0627%u0648%u0644%u0629...%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20video.src%20%3D%20currentSources%5BcurrentSourceIndex%5D%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20video.load%28%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20video.play%28%29.catch%28%28%29%20%3D%3E%20%7B%7D%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%7D%20else%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20showOverlay%28%27%u0641%u0634%u0644%20%u0628%u0633%u0628%u0628%20%u0627%u0644%u0636%u063A%u0637%20%u0639%u0644%u0649%20%u0627%u0644%u0633%u064A%u0631%u0641%u0631%u060C%20%u062D%u0627%u0648%u0644%20%u0645%u0631%u0629%20%u062B%u0627%u0646%u064A%u0629.%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%7D%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%7D%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20video.addEventListener%28%27loadeddata%27%2C%20hideOverlay%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20video.addEventListener%28%27playing%27%2C%20hideOverlay%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20video.addEventListener%28%27error%27%2C%20tryNextSource%29%3B%0D%0A%20%20%20%20%20%20%20%20%7D%0D%0A%0D%0A%20%20%20%20%20%20%20%20//%20---%20%u0627%u0633%u062A%u0642%u0628%u0627%u0644%20%u0633%u062C%u0644%20%u0627%u0644%u0634%u0627%u062A%20%u0644%u0622%u062E%u0631%2024%20%u0633%u0627%u0639%u0629%20---%0D%0A%20%20%20%20%20%20%20%20socket.on%28%27chat_history%27%2C%20%28messages%29%20%3D%3E%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20container%20%3D%20document.getElementById%28%27chat-messages%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20container.innerHTML%20%3D%20%27%27%3B%20%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20messages.forEach%28msg%20%3D%3E%20appendMessage%28msg.user%2C%20msg.text%29%29%3B%0D%0A%20%20%20%20%20%20%20%20%7D%29%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20socket.on%28%27chat_message%27%2C%20%28data%29%20%3D%3E%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20appendMessage%28data.user%2C%20data.text%29%3B%0D%0A%20%20%20%20%20%20%20%20%7D%29%3B%0D%0A%0D%0A%20%20%20%20%20%20%20%20function%20sendChatMessage%28%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20input%20%3D%20document.getElementById%28%27chat-input%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20text%20%3D%20input.value.trim%28%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20if%20%28%21text%29%20return%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20socket.emit%28%27chat_message%27%2C%20%7B%20user%3A%20username%2C%20text%3A%20text%20%7D%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20input.value%20%3D%20%27%27%3B%0D%0A%20%20%20%20%20%20%20%20%7D%0D%0A%0D%0A%20%20%20%20%20%20%20%20function%20handleChatKeyPress%28e%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20if%20%28e.key%20%3D%3D%3D%20%27Enter%27%29%20sendChatMessage%28%29%3B%0D%0A%20%20%20%20%20%20%20%20%7D%0D%0A%0D%0A%20%20%20%20%20%20%20%20function%20appendMessage%28user%2C%20text%29%20%7B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20container%20%3D%20document.getElementById%28%27chat-messages%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20const%20div%20%3D%20document.createElement%28%27div%27%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20div.className%20%3D%20%22bg-slate-900%20p-3%20rounded-xl%20border%20border-slate-800/60%20break-words%22%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20div.innerHTML%20%3D%20%60%3Cspan%20class%3D%22text-indigo-400%20font-bold%20text-sm%20ml-2%22%3E%24%7Buser%7D%3A%3C/span%3E%3Cspan%20class%3D%22text-slate-200%20text-sm%22%3E%24%7Btext%7D%3C/span%3E%60%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20container.appendChild%28div%29%3B%0D%0A%20%20%20%20%20%20%20%20%20%20%20%20container.scrollTop%20%3D%20container.scrollHeight%3B%0D%0A%20%20%20%20%20%20%20%20%7D%0D%0A%20%20%20%20%3C/script%3E%0D%0A%3C/body%3E%0D%0A%3C/html%3E'));
-</script>
+        const lockScreen = document.getElementById('lock-screen');
+        const pinPopup = document.getElementById('pin-popup');
+        const pinInput = document.getElementById('pin-input');
+        const pinErrorMsg = document.getElementById('pin-error-msg');
+        const appContainer = document.getElementById('app-container');
+        const SITE_PIN = '1010';
+        let unlocked = false;
+
+        pinInput.focus();
+
+        function checkPin() {
+            if (pinInput.value.trim() === SITE_PIN) {
+                unlockSite();
+            } else {
+                pinInput.value = '';
+                pinErrorMsg.innerText = '%u0643%u0644%u0645%u0629 %u0627%u0644%u0645%u0631%u0648%u0631 %u063A%u064A%u0631 %u0635%u062D%u064A%u062D%u0629!';
+                pinErrorMsg.classList.add('text-rose-500', 'font-bold');
+                pinInput.focus();
+            }
+        }
+
+        function unlockSite() {
+            unlocked = true;
+            lockScreen.classList.add('hidden');
+            pinPopup.classList.add('hidden');
+            appContainer.classList.remove('hidden');
+            appContainer.classList.add('flex');
+        }
+
+        pinInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') checkPin();
+        });
+
+        let isEscActive = false;
+        window.addEventListener('keydown', (e) => {
+            if (!unlocked) return;
+            if (e.key === 'Escape') {
+                isEscActive = !isEscActive;
+                const escScreen = document.getElementById('esc-screen');
+                const videoPlayer = document.getElementById('native-video-player');
+                
+                if (isEscActive) {
+                    escScreen.classList.remove('hidden');
+                    if (videoPlayer) videoPlayer.pause();
+                } else {
+                    escScreen.classList.add('hidden');
+                }
+            }
+        });
+
+        const socket = io();
+        let username = localStorage.getItem('site_username') || '%u0632%u0627%u0626%u0631';
+        document.getElementById('current-username-display').innerText = username;
+
+        function changeUsername() {
+            const newName = prompt("%u062A%u063A%u064A%u064A%u0631 %u0627%u0633%u0645 %u0627%u0644%u0645%u0633%u062A%u062E%u062F%u0645:", username);
+            if (newName && newName.trim()) {
+                username = newName.trim();
+                localStorage.setItem('site_username', username);
+                document.getElementById('current-username-display').innerText = username;
+            }
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('bg-slate-800', 'text-white'));
+            if(event && event.currentTarget) {
+                event.currentTarget.classList.add('bg-slate-800', 'text-white');
+            }
+        }
+
+        async function fetchAndPlayMedia() {
+            const input = document.getElementById('yt-link-input');
+            const qualitySelect = document.getElementById('yt-quality-select');
+            
+            const url = input.value.trim();
+            const quality = qualitySelect.value;
+            if(!url) return;
+
+            const container = document.getElementById('media-feed');
+            container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-indigo-400 max-w-3xl w-full"><i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i><br>%u062C%u0627%u0631%u064A %u0627%u0644%u062A%u062D%u0645%u064A%u0644...</div>`;
+
+            try {
+                const response = await fetch('/api/youtube', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url, quality: quality })
+                });
+
+                const data = await response.json();
+                const rawSources = (data.sources && data.sources.length ? data.sources : (data.url ? [data.url] : []));
+
+                if (data.success && rawSources.length > 0) {
+                    const proxiedSources = rawSources.map(u => `/api/stream?url=${encodeURIComponent(u)}`);
+                    renderPlayer(data.title || '%u0641%u064A%u062F%u064A%u0648 %u064A%u0648%u062A%u064A%u0648%u0628', proxiedSources, quality);
+                } else {
+                    container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-rose-500 max-w-3xl w-full">%u0641%u0634%u0644 %u0628%u0633%u0628%u0628 API%u060C %u062A%u0623%u0643%u062F %u0625%u0646 %u0627%u0644%u0631%u0627%u0628%u0637 %u0631%u0627%u0628%u0637 %u064A%u0648%u062A%u064A%u0648%u0628 %u0635%u062D%u064A%u062D.</div>`;
+                }
+            } catch (err) {
+                container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-rose-500 max-w-3xl w-full">%u0641%u0634%u0644 %u0627%u0644%u0627%u062A%u0635%u0627%u0644%u060C %u062D%u0627%u0648%u0644 %u0645%u0631%u0629 %u062B%u0627%u0646%u064A%u0629.</div>`;
+            }
+            
+            input.value = '';
+        }
+
+        let currentSources = [];
+        let currentSourceIndex = 0;
+
+        function renderPlayer(title, sources, quality) {
+            currentSources = sources;
+            currentSourceIndex = 0;
+
+            const container = document.getElementById('media-feed');
+            container.innerHTML = `
+                <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex flex-col items-center gap-3 max-w-3xl w-full shadow-2xl">
+                    <div class="w-full flex justify-between items-center px-2">
+                        <h3 class="text-white font-bold text-sm truncate pr-4">${title}</h3>
+                        <span id="stream-source-badge" class="text-xs text-emerald-400 whitespace-nowrap"><i class="fa-brands fa-youtube"></i> %u064A%u0648%u062A%u064A%u0648%u0628 %u0645%u0628%u0627%u0634%u0631 (${quality}p)</span>
+                    </div>
+                    <div class="aspect-video w-full rounded-xl overflow-hidden bg-black border border-slate-800 relative">
+                        <video id="native-video-player" controls autoplay playsinline referrerpolicy="no-referrer" class="w-full h-full outline-none object-contain">
+                            <source id="native-video-source" src="${sources[0]}" type="video/mp4">
+                        </video>
+                        <div id="video-error-overlay" class="hidden absolute inset-0 bg-black/80 flex items-center justify-center text-center text-rose-400 text-sm p-4"></div>
+                    </div>
+                </div>
+            `;
+            setupVideoDiagnostics();
+        }
+
+        function setupVideoDiagnostics() {
+            const video = document.getElementById('native-video-player');
+            const overlay = document.getElementById('video-error-overlay');
+            if (!video || !overlay) return;
+
+            const showOverlay = (message) => { overlay.innerText = message; overlay.classList.remove('hidden'); };
+            const hideOverlay = () => overlay.classList.add('hidden');
+
+            const tryNextSource = () => {
+                if (currentSourceIndex < currentSources.length - 1) {
+                    currentSourceIndex++;
+                    showOverlay('%u0641%u0634%u0644 %u0627%u0644%u062A%u062D%u0645%u064A%u0644%u060C %u062C%u0627%u0631%u064A %u0625%u0639%u0627%u062F%u0629 %u0627%u0644%u0645%u062D%u0627%u0648%u0644%u0629...');
+                    video.src = currentSources[currentSourceIndex];
+                    video.load();
+                    video.play().catch(() => {});
+                } else {
+                    showOverlay('%u0641%u0634%u0644 %u0628%u0633%u0628%u0628 %u0627%u0644%u0636%u063A%u0637 %u0639%u0644%u0649 %u0627%u0644%u0633%u064A%u0631%u0641%u0631%u060C %u062D%u0627%u0648%u0644 %u0645%u0631%u0629 %u062B%u0627%u0646%u064A%u0629.');
+                }
+            };
+
+            video.addEventListener('loadeddata', hideOverlay);
+            video.addEventListener('playing', hideOverlay);
+            video.addEventListener('error', tryNextSource);
+        }
+
+        // --- %u0627%u0633%u062A%u0642%u0628%u0627%u0644 %u0633%u062C%u0644 %u0627%u0644%u0634%u0627%u062A %u0644%u0622%u062E%u0631 24 %u0633%u0627%u0639%u0629 ---
+        socket.on('chat_history', (messages) => {
+            const container = document.getElementById('chat-messages');
+            container.innerHTML = ''; 
+            messages.forEach(msg => appendMessage(msg.user, msg.text));
+        });
+
+        socket.on('chat_message', (data) => {
+            appendMessage(data.user, data.text);
+        });
+
+        function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+            
+            socket.emit('chat_message', { user: username, text: text });
+            input.value = '';
+        }
+
+        function handleChatKeyPress(e) {
+            if (e.key === 'Enter') sendChatMessage();
+        }
+
+        function appendMessage(user, text) {
+            const container = document.getElementById('chat-messages');
+            const div = document.createElement('div');
+            div.className = "bg-slate-900 p-3 rounded-xl border border-slate-800/60 break-words";
+            div.innerHTML = `<span class="text-indigo-400 font-bold text-sm ml-2">${user}:</span><span class="text-slate-200 text-sm">${text}</span>`;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+    </script>
+</body>
+</html>
