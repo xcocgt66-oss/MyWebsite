@@ -18,9 +18,9 @@
     <div id="pin-popup" class="fixed inset-0 z-[999999] flex items-center justify-center bg-black/40">
         <div class="bg-white rounded-2xl p-6 w-72 text-center shadow-xl">
             <h2 class="text-lg font-bold text-slate-800 mb-1">PIN</h2>
-            <p id="pin-error-msg" class="text-sm text-slate-500 mb-4">%u0627%u062F%u062E%u0644 %u0643%u0644%u0645%u0629 %u0627%u0644%u0645%u0631%u0648%u0631</p>
+            <p id="pin-error-msg" class="text-sm text-slate-500 mb-4">ادخل كلمة المرور</p>
             <input id="pin-input" type="password" inputmode="numeric" maxlength="10" class="w-full text-center text-xl tracking-widest border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:border-indigo-500 mb-3">
-            <button id="pin-submit" type="button" onclick="checkPin()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded-xl transition-all">%u062F%u062E%u0648%u0644</button>
+            <button id="pin-submit" type="button" onclick="checkPin()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded-xl transition-all">دخول</button>
         </div>
     </div>
 
@@ -28,16 +28,16 @@
         <aside class="w-64 bg-slate-950 border-l border-slate-800 flex flex-col justify-between p-4">
             <div>
                 <div class="flex items-center justify-between mb-8 px-2">
-                    <h1 class="text-xl font-black text-indigo-400">%u0627%u0644%u0645%u0648%u0642%u0639</h1>
+                    <h1 class="text-xl font-black text-indigo-400">الموقع</h1>
                     <span class="flex h-3 w-3 relative">
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
                     </span>
                 </div>
                 <nav class="space-y-2">
-                    <button onclick="switchTab('youtube')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-800 transition-all font-medium bg-slate-800 text-white"><i class="fa-solid fa-play text-rose-500"></i> %u064A%u0648%u062A%u064A%u0648%u0628</button>
+                    <button onclick="switchTab('youtube')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-800 transition-all font-medium bg-slate-800 text-white"><i class="fa-solid fa-play text-rose-500"></i> يوتيوب</button>
                     <button onclick="switchTab('chat')" class="nav-btn w-full flex items-center justify-between px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-800 transition-all font-medium">
-                        <span class="flex items-center gap-3"><i class="fa-solid fa-comments text-amber-500"></i> %u0627%u0644%u0634%u0627%u062A</span>
+                        <span class="flex items-center gap-3"><i class="fa-solid fa-comments text-amber-500"></i> الشات</span>
                     </button>
                 <button onclick="switchTab('remote')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-800 transition-all font-medium">
 <i class="fa-solid fa-desktop text-cyan-400"></i> التحكم عن بعد
@@ -47,8 +47,8 @@
             
             <div class="border-t border-slate-800/60 pt-4 space-y-3">
                 <div class="flex items-center justify-between text-xs text-slate-400 px-1">
-                    <span>%u0627%u0644%u0645%u0633%u062A%u062E%u062F%u0645:</span>
-                    <button onclick="changeUsername()" id="current-username-display" class="text-indigo-400 font-bold hover:underline">%u0632%u0627%u0626%u0631</button>
+                    <span>المستخدم:</span>
+                    <button onclick="changeUsername()" id="current-username-display" class="text-indigo-400 font-bold hover:underline">زائر</button>
                 </div>
             </div>
         </aside>
@@ -57,31 +57,31 @@
             <div id="tab-youtube" class="tab-content">
                 <h2 class="text-2xl font-bold mb-6 text-white text-center">Direct Youtube API Player</h2>
                 <div class="mb-6 flex flex-col sm:flex-row gap-2 max-w-3xl mx-auto">
-                    <input type="text" id="yt-link-input" placeholder="%u0627%u062F%u062E%u0644 %u0631%u0627%u0628%u0637 %u064A%u0648%u062A%u064A%u0648%u0628" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500">
+                    <input type="text" id="yt-link-input" placeholder="ادخل رابط يوتيوب" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500">
                     
                     <select id="yt-quality-select" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 cursor-pointer text-sm font-medium">
                         <option value="360">360p</option>
-                        <option value="480" selected>480p (%u0627%u0641%u062A%u0631%u0627%u0636%u064A)</option>
+                        <option value="480" selected>480p (افتراضي)</option>
                         <option value="720">720p (HD)</option>
                         <option value="1080">1080p (FHD)</option>
                     </select>
 
-                    <button onclick="fetchAndPlayMedia()" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-white font-medium">%u062A%u0634%u063A%u064A%u0644</button>
+                    <button onclick="fetchAndPlayMedia()" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-white font-medium">تشغيل</button>
                 </div>
                 <div id="media-feed" class="w-full flex justify-center">
-                    <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-slate-500 max-w-3xl w-full">%u0627%u062F%u062E%u0644 %u0631%u0627%u0628%u0637 %u064A%u0648%u062A%u064A%u0648%u0628 %u0644%u062A%u0634%u063A%u064A%u0644%u0647.</div>
+                    <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-slate-500 max-w-3xl w-full">ادخل رابط يوتيوب لتشغيله.</div>
                 </div>
             </div>
 
             <div id="tab-chat" class="tab-content hidden h-[calc(100vh-8rem)] flex flex-col bg-slate-950 rounded-2xl border border-slate-800">
                 <div class="p-4 border-b border-slate-800 font-bold flex justify-between items-center text-white">
-                    <span>%u063A%u0631%u0641%u0629 %u0627%u0644%u0645%u062D%u0627%u062F%u062B%u0629 %u0627%u0644%u0645%u0628%u0627%u0634%u0631%u0629</span>
-                    <span class="text-xs text-emerald-400">%u0645%u062A%u0635%u0644</span>
+                    <span>غرفة المحادثة المباشرة</span>
+                    <span class="text-xs text-emerald-400">متصل</span>
                 </div>
                 <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3"></div>
                 <div class="p-4 border-t border-slate-800 flex gap-2">
-                    <input type="text" id="chat-input" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500" placeholder="%u0627%u0643%u062A%u0628 %u0631%u0633%u0627%u0644%u062A%u0643 %u0647%u0646%u0627..." onkeypress="handleChatKeyPress(event)">
-                    <button onclick="sendChatMessage()" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-white font-medium transition-all">%u0625%u0631%u0633%u0627%u0644</button>
+                    <input type="text" id="chat-input" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-indigo-500" placeholder="اكتب رسالتك هنا..." onkeypress="handleChatKeyPress(event)">
+                    <button onclick="sendChatMessage()" class="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-white font-medium transition-all">إرسال</button>
                 </div>
             </div>
         </main>
@@ -113,7 +113,7 @@
                 unlockSite();
             } else {
                 pinInput.value = '';
-                pinErrorMsg.innerText = '%u0643%u0644%u0645%u0629 %u0627%u0644%u0645%u0631%u0648%u0631 %u063A%u064A%u0631 %u0635%u062D%u064A%u062D%u0629!';
+                pinErrorMsg.innerText = 'كلمة المرور غير صحيحة!';
                 pinErrorMsg.classList.add('text-rose-500', 'font-bold');
                 pinInput.focus();
             }
@@ -149,11 +149,11 @@
         });
 
         const socket = io();
-        let username = localStorage.getItem('site_username') || '%u0632%u0627%u0626%u0631';
+        let username = localStorage.getItem('site_username') || 'زائر';
         document.getElementById('current-username-display').innerText = username;
 
         function changeUsername() {
-            const newName = prompt("%u062A%u063A%u064A%u064A%u0631 %u0627%u0633%u0645 %u0627%u0644%u0645%u0633%u062A%u062E%u062F%u0645:", username);
+            const newName = prompt("تغيير اسم المستخدم:", username);
             if (newName && newName.trim()) {
                 username = newName.trim();
                 localStorage.setItem('site_username', username);
@@ -179,7 +179,7 @@
             if(!url) return;
 
             const container = document.getElementById('media-feed');
-            container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-indigo-400 max-w-3xl w-full"><i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i><br>%u062C%u0627%u0631%u064A %u0627%u0644%u062A%u062D%u0645%u064A%u0644...</div>`;
+            container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-indigo-400 max-w-3xl w-full"><i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i><br>جاري التحميل...</div>`;
 
             try {
                 const response = await fetch('/api/youtube', {
@@ -193,12 +193,12 @@
 
                 if (data.success && rawSources.length > 0) {
                     const proxiedSources = rawSources.map(u => `/api/stream?url=${encodeURIComponent(u)}`);
-                    renderPlayer(data.title || '%u0641%u064A%u062F%u064A%u0648 %u064A%u0648%u062A%u064A%u0648%u0628', proxiedSources, quality);
+                    renderPlayer(data.title || 'فيديو يوتيوب', proxiedSources, quality);
                 } else {
-                    container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-rose-500 max-w-3xl w-full">%u0641%u0634%u0644 %u0628%u0633%u0628%u0628 API%u060C %u062A%u0623%u0643%u062F %u0625%u0646 %u0627%u0644%u0631%u0627%u0628%u0637 %u0631%u0627%u0628%u0637 %u064A%u0648%u062A%u064A%u0648%u0628 %u0635%u062D%u064A%u062D.</div>`;
+                    container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-rose-500 max-w-3xl w-full">فشل بسبب API، تأكد إن الرابط رابط يوتيوب صحيح.</div>`;
                 }
             } catch (err) {
-                container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-rose-500 max-w-3xl w-full">%u0641%u0634%u0644 %u0627%u0644%u0627%u062A%u0635%u0627%u0644%u060C %u062D%u0627%u0648%u0644 %u0645%u0631%u0629 %u062B%u0627%u0646%u064A%u0629.</div>`;
+                container.innerHTML = `<div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center text-rose-500 max-w-3xl w-full">فشل الاتصال، حاول مرة ثانية.</div>`;
             }
             
             input.value = '';
@@ -216,7 +216,7 @@
                 <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex flex-col items-center gap-3 max-w-3xl w-full shadow-2xl">
                     <div class="w-full flex justify-between items-center px-2">
                         <h3 class="text-white font-bold text-sm truncate pr-4">${title}</h3>
-                        <span id="stream-source-badge" class="text-xs text-emerald-400 whitespace-nowrap"><i class="fa-brands fa-youtube"></i> %u064A%u0648%u062A%u064A%u0648%u0628 %u0645%u0628%u0627%u0634%u0631 (${quality}p)</span>
+                        <span id="stream-source-badge" class="text-xs text-emerald-400 whitespace-nowrap"><i class="fa-brands fa-youtube"></i> يوتيوب مباشر (${quality}p)</span>
                     </div>
                     <div class="aspect-video w-full rounded-xl overflow-hidden bg-black border border-slate-800 relative">
                         <video id="native-video-player" controls autoplay playsinline referrerpolicy="no-referrer" class="w-full h-full outline-none object-contain">
@@ -240,12 +240,12 @@
             const tryNextSource = () => {
                 if (currentSourceIndex < currentSources.length - 1) {
                     currentSourceIndex++;
-                    showOverlay('%u0641%u0634%u0644 %u0627%u0644%u062A%u062D%u0645%u064A%u0644%u060C %u062C%u0627%u0631%u064A %u0625%u0639%u0627%u062F%u0629 %u0627%u0644%u0645%u062D%u0627%u0648%u0644%u0629...');
+                    showOverlay('فشل التحميل، جاري إعادة المحاولة...');
                     video.src = currentSources[currentSourceIndex];
                     video.load();
                     video.play().catch(() => {});
                 } else {
-                    showOverlay('%u0641%u0634%u0644 %u0628%u0633%u0628%u0628 %u0627%u0644%u0636%u063A%u0637 %u0639%u0644%u0649 %u0627%u0644%u0633%u064A%u0631%u0641%u0631%u060C %u062D%u0627%u0648%u0644 %u0645%u0631%u0629 %u062B%u0627%u0646%u064A%u0629.');
+                    showOverlay('فشل بسبب الضغط على السيرفر، حاول مرة ثانية.');
                 }
             };
 
@@ -254,7 +254,7 @@
             video.addEventListener('error', tryNextSource);
         }
 
-        // --- %u0627%u0633%u062A%u0642%u0628%u0627%u0644 %u0633%u062C%u0644 %u0627%u0644%u0634%u0627%u062A %u0644%u0622%u062E%u0631 24 %u0633%u0627%u0639%u0629 ---
+        // --- استقبال سجل الشات لآخر 24 ساعة ---
         socket.on('chat_history', (messages) => {
             const container = document.getElementById('chat-messages');
             container.innerHTML = ''; 
