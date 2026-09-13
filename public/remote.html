@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Remote Desktop</title>
+
+
+<style>
+
+*{
+    box-sizing:border-box;
+}
+
+
+html,
+body{
+
+    margin:0;
+    padding:0;
+
+    width:100%;
+    height:100%;
+
+    overflow:hidden;
+
+    background:#020617;
+
+    font-family:Arial, Tahoma, sans-serif;
+
+}
+
+
+/* الشريط العلوي */
+
+#topbar{
+
+    height:55px;
+
+    width:100%;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:space-between;
+
+    padding:0 15px;
+
+    background:#020617;
+
+    color:white;
+
+    border-bottom:1px solid #1e293b;
+
+}
+
+
+/* العنوان */
+
+.title{
+
+    font-size:16px;
+
+    font-weight:bold;
+
+}
+
+
+
+/* الأزرار */
+
+button{
+
+    background:#0891b2;
+
+    color:white;
+
+    border:none;
+
+    padding:10px 18px;
+
+    border-radius:10px;
+
+    cursor:pointer;
+
+    font-weight:bold;
+
+    font-size:14px;
+
+}
+
+
+button:hover{
+
+    background:#06b6d4;
+
+}
+
+
+/* مكان Guacamole */
+
+#frame-container{
+
+    width:100%;
+
+    height:calc(100% - 55px);
+
+}
+
+
+
+iframe{
+
+    width:100%;
+
+    height:100%;
+
+    border:0;
+
+    display:block;
+
+}
+
+
+</style>
+
+
+</head>
+
+
+
+<body>
+
+
+
+<div id="topbar">
+
+
+<button onclick="goHome()">
+
+⬅ رجوع
+
+</button>
+
+
+
+<div class="title">
+
+🖥️ Remote Desktop
+
+</div>
+
+
+
+<button onclick="openFullscreen()">
+
+⛶ Full Screen
+
+</button>
+
+
+
+</div>
+
+
+
+
+<div id="frame-container">
+
+
+<iframe
+
+id="guacamoleFrame"
+
+src="https://a300-84mq.taile627cc.ts.net/guacamole/"
+
+allow="fullscreen"
+
+>
+
+</iframe>
+
+
+</div>
+
+
+
+
+
+
+<script>
+
+
+// الرجوع للموقع الرئيسي
+
+function goHome(){
+
+    window.location.href="/";
+
+}
+
+
+
+
+
+// Full Screen
+
+function openFullscreen(){
+
+
+    const iframe =
+    document.getElementById("guacamoleFrame");
+
+
+    if(iframe.requestFullscreen){
+
+        iframe.requestFullscreen();
+
+    }
+
+    else if(iframe.webkitRequestFullscreen){
+
+        iframe.webkitRequestFullscreen();
+
+    }
+
+}
+
+
+
+
+
+// زر F11
+
+document.addEventListener(
+"keydown",
+function(event){
+
+
+    if(event.key === "F11"){
+
+        event.preventDefault();
+
+        openFullscreen();
+
+    }
+
+
+});
+
+
+
+</script>
+
+
+
+
+</body>
+
+</html>
