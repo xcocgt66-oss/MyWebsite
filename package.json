@@ -12,6 +12,7 @@
     "cors": "^2.8.6",
     "express": "^4.22.2",
     "socket.io": "^4.8.3"
+    "http-proxy-middleware": "^3.0.0"
   },
   "keywords": [],
   "author": "",
